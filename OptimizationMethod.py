@@ -40,7 +40,7 @@ class BestProbe(OptimizationMethod):
                 sim_result.save_data(base_dir=context.base_dir)
                 context.objective.evaluate(sim_result, context, {**new_params})
                 print("параметры", context.best_params)
-                print(trial, "итерации")
+                print(iteration, "итерации")
 
                 iteration += 1
                 progress = int((iteration + 1) / self.iterations * 100)
@@ -196,7 +196,7 @@ class GradientDescent(OptimizationMethod):
             # 4 обновляем точку
 
             new_params = temporal_params
-            progress = int((iteration + 1) / self.iterations * 100)
+            progress = int((iteration) / self.iterations * 100)
             progress_queue.put(("progress", progress))
 
         if context.best_params is not None:

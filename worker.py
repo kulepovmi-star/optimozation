@@ -8,7 +8,6 @@ from OptimizationMethod import GradientDescent, BestProbe
 import time
 
 def optimization_process(data, progress_queue):
-
     cubit, fidesys, fc = setup_fidesys()
 
 

@@ -3,7 +3,7 @@ import sys
 
 def setup_fidesys():
 
-    fidesys_path = r'C:\Program Files\Fidesys\CAE-Fidesys-8.1'
+    fidesys_path = r'C:\Program Files\Fidesys\CAE-Fidesys-8.2'
     prep_path = os.path.join(fidesys_path, 'preprocessor', 'bin')
 
     # ВАЖНО: менять окружение ЗДЕСЬ
