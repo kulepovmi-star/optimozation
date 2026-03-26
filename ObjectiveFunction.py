@@ -42,7 +42,7 @@ class Mass(OptimizationFunction):
             print("penalty:", penalty)
 
         if delta_disp > 1:
-            penalty += k*abs((delta_stress-1))
+            penalty += k*abs((delta_disp-1))
 
         if penalty == simulation_result.mass/self.norm_mass and self.best_value > simulation_result.mass:
             self.best_value = simulation_result.mass

@@ -1,16 +1,28 @@
 import math
-from math import sin
+from math import sin, cos
 import numpy as np
 import matplotlib.pyplot as plt
 
-x=np.linspace(0, 2*math.pi, 50).reshape(-1, 1)
+x=np.linspace(0, 2*math.pi, 100)
+z=np.linspace(0, 2*math.pi, 100)
 print(x)
 date=[]
+X,Z=np.meshgrid(x,z)
+Y=np.sin(X)+np.cos(Z)
 y=[]
-for i in x:
-    date.append([sin(i), i])
-    y.append(sin(i))
+
+
+for x_i, z_i in zip(x, z):
+    date.append([sin(x_i)+1, x_i])
+    y.append(x_i**2)
+
 print(y)
+fig = plt.figure(figsize=(10, 7))
+ax = fig.add_subplot(111, projection='3d')
+
+surf = ax.plot_surface(X, Z, Y)
+fig.colorbar(surf)
+plt.show()
 """print(*date, sep="\n")
 covariation=np.cov(date, rowvar=False)
 vaiation=np.var(x, ddof=0)
@@ -53,25 +65,27 @@ def rbf_kernel(x1, x2, sigma=1, l=1):
 *rbf_kernel(x, y), sep="\n"
 )"""
 
-X1=np.linspace(0, 2*math.pi, 100).reshape(-1, 1)
+X1=np.linspace(0, 4*math.pi, 100)
 
-def optimization_1(x, y, X):
-    covXx = rbf_kernel(X, x)[0]
+def optimization_1(x, y_train, X):
+    covXx = rbf_kernel(X, x)
     print()
     print(covXx)
     covxx = rbf_kernel(x, x)
     print(covxx)
-    Meanx = np.mean(X)
-    Meany =np.mean(y)
-    qw=[i-Meany for i in y]
-    print("среднее",Meany)
+    """Meanx = np.mean(X)"""
+    mu_y = np.mean(y_train)
+    print("mu_y",mu_y)
+    y_centered = y_train - mu_y
+    print("y_centered", y_centered)
+    qw = np.linalg.solve(covxx, y_centered)
 
     print(covXx @ np.linalg.inv(covxx) )
 
-    y = covXx @ np.linalg.inv(covxx) @ qw
+    mu = mu_y+covXx @ qw
 
-
-    return y
+    print("mu",mu)
+    return mu[0]
 
 Y1=[]
 
@@ -82,5 +96,5 @@ for i in X1:
 
 print("y1", Y1)
 plt.plot(X1, Y1)
-plt.plot(x, y)
+#plt.plot(x, y)
 plt.show()
