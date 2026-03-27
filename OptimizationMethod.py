@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 import random
 from re import search
 import math
-
+import matplotlib.pyplot as plt
 
 import numpy as np
 from collections import defaultdict
@@ -203,183 +203,108 @@ class GradientDescent(OptimizationMethod):
             context.runner.calculation(context.script_processor.build(context.best_params))
         else: print("the parameters are not optimized")
         progress_queue.put(("finished", None))
-    """def optimize(self, context):
-        params=[]
-        penalty_dict = {}
-        gradient_dict = {}
-        dict_grad={}
-        dict_step={}
-        dict_lr={}
 
-        stop_flag_dict={}
-        sim_result = SimulationResult()
-        # случайный выбор исходных параметров
-        new_params = {}
-        print("step",self.steps)
-        range_of_values = context.range_params.creating_a_range(None)
-        v = dict()
-        G = dict()
-        for key, value in range_of_values.items():
-            mean_value = np.mean(value)
-            new_params[key] = mean_value
-            stop_flag_dict[key] = False
-            dict_grad[key]=[]
-            dict_step[key]=self.steps.get(key, self.step_size)
-            dict_lr[key] = self.l_r.get(key, self.lr)
-            v[key]=0
-            G[key]=0
-            penalty_dict[key] = []
-            gradient_dict[key]=[]
-        context.runner.calculation(context.script_processor.build(new_params))
+
+e=1e-3
+class Bayesian_optimization():
+    def __init__(self, iterations=10):
+        self.iterations = iterations
+        self.delta=float("inf")
+
+    def func(self, x, context,sim_result):
+        context.runner.calculation(
+            context.script_processor.build({"r":x})
+        )
+
         sim_result.save_data(base_dir=context.base_dir)
-        for key in range_of_values:
-            print(key)
-            print(type(penalty_dict[key]))
-            penalty_dict[key].append(context.objective.evaluate(sim_result, context, new_params))
 
-        # условие остановки итерации 1) неправильная логика при смене знака, так и макс, градиент равен 0 или около 0
+        penalty= context.objective.evaluate(
+            sim_result, context, {"r":x}
+        )
+        print("123",penalty)
+        return penalty
 
+    def UCB(self,mean, sigma, *, b=3):
+        return mean - b * sigma
 
-        iteration=0
-        while list(stop_flag_dict.values()).count(True) != len(stop_flag_dict.values()) or iteration < self.iterations:
-            temporal_params={}
-            for key, value in new_params.items():
-                iteration += 1
-                print("итерации ", iteration)
-                if stop_flag_dict[key] == False:
+    def plot(self,X, Y):
+        plt.plot(X, Y)
+        plt.show()
 
-                    # если во время итерации мы вышли за диапазон то возвращаем исходные значения
-                    if min(range_of_values[key]) > value:
-                        value = min(range_of_values[key])
-                        dict_lr[key] = self.l_r.get(key, self.lr)
-                        dict_step[key] = self.steps.get(key, self.step_size)
+    def rbf_kernel(self,x_predict, x_init, sigma=1, l=0.3):  # матрица x1*x2
 
-                    max_value = value + value * dict_step[key]
+        x_predict = np.atleast_1d(x_predict)
+        x_init = np.atleast_1d(x_init)
+        value = sigma ** 2 * np.exp(-(x_predict[:, None] - x_init[None, :]) ** 2 / (2 * l ** 2))
+        return value
 
-                    if max(range_of_values[key]) < max_value:
-                        max_value = max(range_of_values[key])
+    def inv(self,a, b):
+        if np.linalg.det(a) < 1e-6:
+            for index1, i in enumerate(a):
+                for index2, j in enumerate(i):
+                    if index1 == index2:
+                        a[index1][index2] += e * 10
+        qw = np.linalg.solve(a, b)
+        return qw
 
-                    print("параметры величин", key, value, "+", max_value,)
-                    value_norm = (value - min(range_of_values[key])) / (
-                                max(range_of_values[key]) - min(range_of_values[key]))
-                    context.runner.calculation(context.script_processor.build({**new_params, **{key: max_value}}))
-                    sim_result.save_data(base_dir=context.base_dir)
-                    result_plus = context.objective.evaluate(sim_result, context, {**new_params, **{key: max_value}})
+    def baesian(self, data, X_new):
+        y_train, x_train = data
+        covXx = self.rbf_kernel(X_new, x_train)
+        covxx = self.rbf_kernel(x_train, x_train)
+        mu_y = np.mean(y_train)
+        y_centered = y_train - np.full(len(y_train), float(mu_y))
+        qw = self.inv(covxx, y_centered)
+        mu_y = np.atleast_1d(mu_y)
+        mu = mu_y + covXx @ qw
+        return mu
 
-                    gradient = (result_plus - penalty_dict[key][-1]) / (dict_step[key])
-                    gradient_dict[key].append(gradient)
-                    penalty_dict[key].append(result_plus)
+    def distributions(self,data, X_new):
+        y_train, x_train = data
+        covXx = self.rbf_kernel(X_new, x_train)
+        covxx = self.rbf_kernel(x_train, x_train)
+        covxX = self.rbf_kernel(x_train, X_new)
+        covXX = self.rbf_kernel(X_new, X_new)
+        qw = self.inv(covxx, covxX)
+        sigma = covXX - covXx @ qw
+        # print((np.diag(sigma)))
+        return np.sqrt(np.abs(np.diag(sigma)))
 
-                    # при развороте меняем шаг
-                    if len(gradient_dict[key])>1 and numpy.sign(gradient_dict[key][-1]) != numpy.sign(gradient_dict[key][-2]):
-                        print("меняем шаг")
-                        dict_lr[key] = dict_lr[key] / 1.1
-                    # ограничение на градиент
-                    # gradient = max(-1.5, min(1.5, gradient))
+    def optimize(self, context, progress_queue):
+        sim_result = SimulationResult()
+        range_of_values = context.range_params.creating_a_range(None)
+        new_params = {}
 
-                    print("параметры", key, "+:", max_value, result_plus, penalty_dict[key][-2], "lr:",
-                          dict_lr[key], "grad:", gradient)
+        x=range_of_values.get("r")
+        data = [[], []]
+        first_x = random.choice(x)
+        first_y = self.func(first_x, context,sim_result)
+        data[0].append(first_y)
+        data[1].append(first_x)
+        for i in range(self.iterations):
+            temporary_data = []
+            temporary_y = self.baesian(data, x)
+            temporary_data.append(temporary_y)
+            temporary_data.append(x)
+            sigma = self.distributions(data, x)
+            temporary_UCB = self.UCB(temporary_y, sigma)
 
-                    if abs(gradient) < 0.04:  # или какому-нибудь небольшому значению
-                        stop_flag_dict[key] = True
+            plt.plot(data[1], data[0], label="real")
+            plt.plot(x, temporary_data[0])
+            plt.plot(x, sigma, label="sigma")
+            next_x = x[np.argmin(temporary_UCB)]
+            next_y = self.func(next_x,  context,sim_result)
+            data[0].append(next_y)
+            data[1].append(next_x)
 
-                    v[key] = self.b1 * v[key] + (1 - self.b1) * gradient
-                    G[key] = self.b2 * G[key] + (1 - self.b2) * gradient ** 2
-                    new_value_norm = value_norm - dict_lr[key] * v[key] / (G[key] + self.epsilon) ** 0.5
-                    print("изменение", dict_lr[key] * v[key] / (G[key] + self.epsilon))
-
-                    dict_grad[key].append(gradient)
-                    temporal_params[key] = max(value - 0.2 * value, min(value + 0.2 * value, new_value_norm * (
-                                max(range_of_values[key]) - min(range_of_values[key])) + min(range_of_values[key])))
-                    params.append(float(temporal_params[key]))
-                    print("Результат", temporal_params[key], params)
-
-                else:
-                    if context.best_params is not None:
-                        context.runner.calculation(context.script_processor.build(context.best_params))
-                    else:
-                        print("the parameters are not optimized")
-                    return None
-            new_params={**new_params, **temporal_params}
-        if context.best_params is not None:
-            context.runner.calculation(context.script_processor.build(context.best_params))
-            return None
-        else:
-            print("the parameters are not optimized")
-            return None
-        while list(stop_flag_dict.values()).count(True)!=len(stop_flag_dict.values()) or iteration<self.iterations:
-            for key, value in new_params.items():
-                iteration+=1
-                print("итерации ", iteration)
-                if stop_flag_dict[key] == False :
-
-                    # если во время итерации мы вышли за диапазон то возвращаем исходные значения
-                    if min(range_of_values[key]) > value:
-                        value = min(range_of_values[key])
-                        dict_lr[key] = self.l_r.get(key, self.lr)
-                        dict_step[key] = self.steps.get(key, self.step_size)
-
-                    max_value = value + value*dict_step[key]
-
-
-                    if max(range_of_values[key])<max_value:
-                        max_value=max(range_of_values[key])
-
-                    min_value = value - value * dict_step[key]
-                    if min(range_of_values[key]) > min_value:
-                        min_value = min(range_of_values[key])
-
-                    print("параметры величин", key, value, "+", max_value, "-",min_value,)
-                    value_norm=(value-min(range_of_values[key]))/(max(range_of_values[key])-min(range_of_values[key]))
-                    context.runner.calculation(context.script_processor.build({**new_params, **{key:max_value}}))
-                    sim_result.save_data(base_dir=context.base_dir)
-                    result_plus = context.objective.evaluate(sim_result, context, {**new_params, **{key:max_value}})
-
-                    context.runner.calculation(context.script_processor.build({**new_params, **{key:min_value}}))
-                    sim_result.save_data(base_dir=context.base_dir)
-                    result_minus = context.objective.evaluate(sim_result, context,  {**new_params, **{key:min_value}})
-
-
-
-                    gradient=(result_plus - result_minus)/(2*dict_step[key])
-                    penalty_list.append(gradient)
-
-                    # при развороте меняем шаг
-                    if len(penalty_list)>1 and numpy.sign(penalty_list[-1])!=numpy.sign(penalty_list[-2]):
-                        print("меняем шаг")
-                        dict_lr[key]=dict_lr[key]/2
-                    # ограничение на градиент
-                    #gradient = max(-1.5, min(1.5, gradient))
-
-                    print("параметры", key, "+:", max_value, "-:",min_value, result_plus, result_minus, "delta:", dict_step[key], "grad:", gradient)
-
-                    if abs(result_plus - result_minus) < 0.004: # или какому-нибудь небольшому значению
-                        stop_flag_dict[key] = True
-
-                    v[key]=self.b1*v[key]+(1-self.b1)*gradient
-                    G[key]=self.b2*G[key]+(1-self.b2)*gradient**2
-                    new_value_norm=value_norm - dict_lr[key] * v[key]/(G[key]+self.epsilon)**0.5
-                    print("изменение", dict_lr[key]*v[key]/(G[key]+self.epsilon))
-
-                    dict_grad[key].append(gradient)
-                    new_params[key] = max(value-0.2*value, min(value+0.2*value, new_value_norm*(max(range_of_values[key])-min(range_of_values[key]))+min(range_of_values[key])))
-                    print("Результат", new_params[key], )
-
-                else:
-                    if context.best_params is not None:
-                        context.runner.calculation(context.script_processor.build(context.best_params))
-                    else:
-                        print("the parameters are not optimized")
-                    return None
-
+            print("x:", next_x, "y:", next_y)
+            plt.legend()
+            plt.show()
+            self.delta = abs((data[0][-1] - data[0][-2]) / max(data[0][-2], e))
 
         if context.best_params is not None:
             context.runner.calculation(context.script_processor.build(context.best_params))
-            return None
-        else:
-            print("the parameters are not optimized")
-            return None"""
-
+        else: print("the parameters are not optimized")
+        progress_queue.put(("finished", None))
 
 
 

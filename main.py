@@ -13,7 +13,7 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(current_dir, 'первый тест', 'банер')
+    file_path = os.path.join(current_dir, 'первый тест', 'балка')
     reader = JouReader(file_path)
     app=QtWidgets.QApplication(sys.argv)
     script, params = reader.read()

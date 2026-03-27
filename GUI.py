@@ -8,7 +8,7 @@ from context import OptimizationContext
 from creationscript import ScriptProcessor
 from runner import FidesysRunner
 from ObjectiveFunction import Mass, Strain, Stress
-from OptimizationMethod import GradientDescent, BestProbe
+from OptimizationMethod import GradientDescent, BestProbe, Bayesian_optimization
 from parameter_range import ParameterRangeGenerator
 import numpy as np
 
@@ -457,7 +457,7 @@ class Dialog(QtWidgets.QWidget):
     def get_method(self):
         methods = {"Метод наилучшей пробы": BestProbe,
                    "Градиентный спуск": GradientDescent,
-                   "Байесовская оптимизация": None}
+                   "Байесовская оптимизация": Bayesian_optimization}
         return methods[self.combo1.currentText()]
 
     def get_task(self):
