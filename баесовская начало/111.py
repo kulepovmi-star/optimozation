@@ -14,24 +14,16 @@ def plot(X, Y):
     plt.show()
 
 def rbf_kernel(x_predict, x_init, sigma=1, l=1): # матрица x1*x2
-    result=[]
-    if isinstance(x_predict, list):
-        pass
-    else:
-        x_predict=[x_predict]
-    if isinstance(x_init, list):
-        pass
-    else:
-        x_init=[x_init]
-    for i in x_predict:
-        row=[]
-        for j in x_init:
-            value=sigma ** 2 * math.exp(-(i-j)**2 / (2 * l ** 2))
-            row.append(value)
-        result.append(row)
-    return result
+    x_predict=np.atleast_1d(x_predict)
+    x_init=np.atleast_1d(x_init)
+    value = sigma ** 2 * np.exp(-(x_predict[:,None] - x_init[:,None]) ** 2 / (2 * l ** 2))
+    print("размер", len(value), len(value[0]))
+    return value
 
 def inv(a, b):
+    print("обратная")
+    print(a)
+    print(b)
     print("det", np.linalg.det(a))
     if np.linalg.det(a) < e:
         for index1, i in enumerate(a):
@@ -53,9 +45,10 @@ def baesian(data, X_new):
     print(y_centered)
     print("cov",covxx)
     qw=inv(covxx, y_centered)
+    mu_y=np.atleast_1d(mu_y)
     mu = mu_y + covXx @ qw
     print(mu)
-    return mu[0]
+    return mu
 
 
 
@@ -67,7 +60,9 @@ def distributions(data, X_new):
     covXX=rbf_kernel(X_new, X_new)
     qw = inv(covxx, covxX)
     sigma=covXX-covXx@qw
-    return sigma[0][0]
+    print(type(sigma))
+    #print((np.diag(sigma)))
+    return np.sqrt(np.diag(sigma))
 
 def UCB(mean, sigma, *,b=1):
     return mean-b*sigma
@@ -82,26 +77,28 @@ delta=float("inf")
 
 # цикл
 while delta>e:
-    temporary_sigma=[]
-    temporary_data=[[],[]]
+    temporary_data=[]
     temporary_UCB=[]
-    for temporary_x in x:
-        temporary_y=baesian(data, temporary_x)
-        temporary_data[0].append(temporary_y)
-        temporary_data[1].append(temporary_x)
-        sigma=distributions(data, temporary_x)
-        temporary_sigma.append(sigma)
-        temporary_UCB.append(UCB(temporary_y, sigma))
+    temporary_y=baesian(data, x)
+    print("y", temporary_y)
+    temporary_data.append(temporary_y)
+    temporary_data.append(x)
+    print("11",temporary_data)
+    sigma=distributions(data, x)
+    temporary_UCB=UCB(temporary_y, sigma)
+    print("sigma",sigma)
 
     plt.plot(x, temporary_data[0])
-    plt.plot(x, temporary_sigma, label="sigma")
+    plt.plot(x, sigma, label="sigma")
+    plt.legend()
+    plt.show()
     next_x=x[np.argmin(temporary_UCB)]
     next_y=func(next_x)
     data[0].append(next_y)
     data[1].append(next_x)
-    plt.legend()
+
     print("x:",next_x)
-    plt.show()
+
     delta=abs((data[0][-1]-data[0][-2])/max(data[0][-2],e))
 
 
