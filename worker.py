@@ -34,7 +34,7 @@ def optimization_process(data, progress_queue):
 
     params_range = ParameterRangeGenerator(
         data["ranges"],
-        30
+        100
     )
 
     context = OptimizationContext(

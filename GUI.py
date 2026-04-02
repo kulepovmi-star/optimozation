@@ -82,7 +82,7 @@ class TableParamsWidget(QtWidgets.QWidget):
 
         #  КНОПКИ УПРАВЛЕНИЯ ТАБЛИЦЕЙ
         button_layout = QtWidgets.QHBoxLayout()
-        self.add_row_btn = QtWidgets.QPushButton("Отчистить")
+        self.add_row_btn = QtWidgets.QPushButton("Очистить")
         self.save_btn = QtWidgets.QPushButton("Сохранить")
         self.save_btn.clicked.connect(self.save_data)
         button_layout.addWidget(self.add_row_btn)

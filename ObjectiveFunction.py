@@ -21,10 +21,10 @@ class OptimizationFunction(ABC):
 
 
 class Mass(OptimizationFunction):
+    mass = []
     # для градиентного спуска нам необходимо работать только с penalty, поскольку на каждой итерации мы стремимся его уменьшить,
     # для работы с методом лучшей пробы нам необходимо записывать параметры проходящие через установленные ограничения как и в градиенте, но записывать только если значение массы, то есть penalty является наименьшим
-    def evaluate(self, simulation_result: "SimulationResult", context:"OptimizationContext", best_params, k=30):
-
+    def evaluate(self, simulation_result: "SimulationResult", context:"OptimizationContext", best_params, k=100):
         max_stress_component = max(stress[6] for stress in simulation_result.stress_list)
         max_strain_component = max(max(strain) for strain in simulation_result.strain_list)
         delta_stress= max_stress_component / context.constraints.get("Stress", float("inf"))
@@ -35,19 +35,24 @@ class Mass(OptimizationFunction):
             self.norm_mass=simulation_result.mass
 
         print("данные", "mass:",simulation_result.mass, "disp:",delta_disp, "stress",delta_stress)
-        penalty = simulation_result.mass/self.norm_mass
-        print("penalty:", penalty)
-        if 1 < delta_stress < float("inf"):
-            penalty += k*(delta_stress-1)**2
-            print("penalty:", penalty)
+        mass_ratio = (simulation_result.mass / self.norm_mass)**2
+        self.mass.append(mass_ratio)
+        print("mass_ratio", self.mass)
 
-        if 1 < delta_disp < float("inf"):
-            penalty += k*(delta_disp-1)**2
+        def violation(r):
+            return max(0.0, r - 1.0)
 
-        if penalty == simulation_result.mass/self.norm_mass and self.best_value > simulation_result.mass:
-            self.best_value = simulation_result.mass
+        constraint_penalty = (
+                violation(delta_stress) ** 2 +
+                violation(delta_disp) ** 2
+        )
+
+        penalty = mass_ratio * (1 + k * constraint_penalty)
+
+        # сохраняем только допустимые решения
+        if constraint_penalty == 0 and self.best_value > simulation_result.mass:
             print("записали")
-            print(best_params)
+            self.best_value = simulation_result.mass
             context.best_params = best_params
 
         return penalty
