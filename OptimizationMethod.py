@@ -92,7 +92,7 @@ class GradientDescent(OptimizationMethod):
         G = {}
 
         for key, value in range_of_values.items():
-            new_params[key] = np.mean(value)
+            new_params[key] = random.choice(value)
 
             gradient_dict[key] = []
 
@@ -126,6 +126,7 @@ class GradientDescent(OptimizationMethod):
             # 2 вычисляем все градиенты
 
             for key, value in new_params.items():
+
 
                 step = value * dict_step[key]
 
@@ -191,6 +192,10 @@ class GradientDescent(OptimizationMethod):
                 )
                 params.append(new_value)
                 print("величина", params)
+                if new_value<min(range_of_values[key]):
+                    new_value=min(range_of_values[key])
+                if new_value>max(range_of_values[key]):
+                    new_value=max(range_of_values[key])
                 temporal_params[key] = new_value
             print("параметры", temporal_params)
             # 4 обновляем точку
@@ -207,15 +212,93 @@ class GradientDescent(OptimizationMethod):
 
 
 class Bayesian_optimization():
-    def __init__(self, iterations=10):
+    def __init__(self, iterations):
         self.iterations = iterations
         self.delta=float("inf")
         self.L=None
+        self.sigma=1
+        self.l=1
+    def random_search(self, number_of_points, range_of_values, context, sim_result):
+        X_train, Y_train=[],[]
+        for _ in range(number_of_points):
+            new_params = {
+                k: random.choice(v)
+                for k, v in range_of_values.items()
+            }
+            X_train.append(list(new_params.values()))
+            context.runner.calculation(context.script_processor.build({**new_params}))
+            sim_result.save_data(base_dir=context.base_dir)
+
+            Y_train.append(
+                np.log(context.objective.evaluate(
+                    sim_result, context, new_params
+                )+1)
+            )
+        Y_train = np.array(Y_train, float)
+        Y_train = np.clip(Y_train, 0, 20)
+        return np.array(X_train, float), np.array(Y_train, float)
+
+    def leave_one_out(self, X_train, Y_train):
+        std = np.std(X_train, axis=0)
+        std[std < 1e-12] = 1.0
+        Xn = (X_train - np.mean(X_train, axis=0)) / std
+        Yn = (Y_train - np.mean(Y_train)) / np.std(Y_train)
+        preds=[]
+        N = len(Xn)
+        for i in range(N):
+            mask = np.ones(N, dtype=bool)
+            mask[i] = False
+
+            X_sub = Xn[mask]
+            Y_sub = Yn[mask]
+
+            data = [Y_sub, X_sub]
+
+            mu = self.baesian(data, Xn[i])
+
+            preds.append(mu[0])
+
+        return self.MSE(Yn, np.array(preds))
+
+    def MSE(self, y_true, y_pred):
+        y_true = np.ravel(y_true)
+        y_pred = np.ravel(y_pred)
+        return np.mean((y_true-y_pred)**2)
+
+    def log_marginal_likelihood(self, X, y):
+        K = self.rbf_kernel(X, X) + 1e-6 * np.eye(len(X))
+        L = np.linalg.cholesky(K)
+
+        alpha = np.linalg.solve(L.T, np.linalg.solve(L, y))
+
+        term1 = -0.5 * y.T @ alpha
+        term2 = -np.sum(np.log(np.diag(L)))
+        term3 = -0.5 * len(X) * np.log(2 * np.pi)
+
+        return (term1 + term2 + term3).item()
+    def hyperparams_random_search(self, number_of_points, range_of_values, context, sim_result, sample, sigma_params, l_params):
+        error=[]
+        params=[]
+        print("диапазон",range_of_values)
+        sigma_grid = np.linspace(sigma_params[0], sigma_params[1], 100)
+        l_grid = np.linspace(l_params[0], l_params[1], 100)
+        X_train, Y_train = self.random_search(number_of_points, range_of_values, context, sim_result)
+        for sigma in sigma_grid:
+            for l in l_grid:
+                self.sigma = sigma
+                self.l = l
+                print( " sigma",self.sigma, " l",self.l)
+                params.append((self.sigma, self.l))
+                error.append(self.log_marginal_likelihood(X_train, Y_train))
+        best = np.argmax(error)
+        self.sigma, self.l = params[best]
+        print("лучшее", params[best])
+        return X_train, Y_train
 
     def vector_to_params(self, x_vec, param_names):
         return dict(zip(param_names, x_vec))
 
-    def func(self, x_vec, param_names, context,sim_result):
+    def func(self, x_vec, param_names, context, sim_result):
         """x, y = x_vec
 
                 # Branin function
@@ -242,57 +325,53 @@ class Bayesian_optimization():
             sim_result, context, params
         )
         print("penalty:", penalty)
+        penalty = np.log(penalty + 1)
         return penalty
 
 
-
-
     def LCB(self,mean, sigma, *, b=1.5):
-
         return mean - b * sigma
 
 
-    def rbf_kernel(self,x_predict, x_init, *, sigma=1, l=1):  # матрица x1*x2
-
+    def rbf_kernel(self,x_predict, x_init):  # матрица x1*x2
+        """если точки кучкуются слишком рано → l слишком большой
+        если прыгает хаотично → l слишком маленький
+        если игнорирует хорошие точки → σ слишком маленький"""
         X1 = np.atleast_2d(x_predict)
         X2 = np.atleast_2d(x_init)
 
         diff = X1[:, None, :] - X2[None, :, :]
         sqdist = np.sum(diff ** 2, axis=2)
 
-        return sigma ** 2 * np.exp(-sqdist / (2 * l ** 2))
+        return self.sigma ** 2 * np.exp(-sqdist / (2 * self.l ** 2))
 
 
-    def baesian(self, data, X_new, sigma_kernel):
+    def baesian(self, data, X_new):
         y_train, x_train = data
-        covXx = self.rbf_kernel(X_new, x_train, sigma=sigma_kernel, l=1)
-        covxx = self.rbf_kernel(x_train, x_train, sigma=sigma_kernel, l=1)
+        covXx = self.rbf_kernel(X_new, x_train)
+        covxx = self.rbf_kernel(x_train, x_train)
         noise = 1e-6
         K = covxx + noise * np.eye(len(covxx))
         self.L = np.linalg.cholesky(K)
-        mu_y = np.mean(y_train)
-        y_std=np.std(y_train)
-        if y_std < 1e-12:
-            y_std = 1.0
-        self.y_std = y_std
-        y_centered=(y_train - mu_y) / y_std
-        alpha = np.linalg.solve(self.L.T, np.linalg.solve(self.L, y_centered))
-        mu_norm = covXx @ alpha
-        mu = mu_y + y_std * mu_norm
-        return mu
+        alpha = np.linalg.solve(self.L.T,
+                                np.linalg.solve(self.L, y_train))
 
-    def distributions(self,data, X_new, sigma_kernel):
+        mu = covXx @ alpha
+
+        return mu  # уже нормализованный!
+
+    def distributions(self,data, X_new):
         y_train, x_train = data
-        covXx = self.rbf_kernel(X_new, x_train, sigma=sigma_kernel, l=1)
-        covXX = self.rbf_kernel(X_new, X_new, sigma=sigma_kernel, l=1)
+        covXx = self.rbf_kernel(X_new, x_train)
+        covXX = self.rbf_kernel(X_new, X_new)
         v = np.linalg.solve(self.L, covXx.T)
         var = covXX - v.T @ v
         sigma = np.sqrt(np.maximum(np.diag(var), 0))
-        sigma = self.y_std * sigma
-        return sigma
+
+        return sigma  # тоже в нормализованном масштабе
 
     def denormalize(self, x_norm):
-        return x_norm * (self.X_max - self.X_min) + self.X_min
+        return x_norm * self.X_std + self.mean_X
 
     def pairwise_distances(self,X):
         """
@@ -363,23 +442,38 @@ class Bayesian_optimization():
         else:
             print("Plotting for D > 2 is not supported. Consider slicing parameters or using projections.")
 
+    def normalization(self, X, fit=False):
+
+        if fit:
+            self.mean_X = np.mean(X, axis=0)
+            self.X_std = np.std(X, axis=0)
+            self.X_std[self.X_std < 1e-12] = 1.0
+
+        return (X - self.mean_X) / self.X_std
+
     def optimize(self, context, progress_queue):
+
         sim_result = SimulationResult()
         range_of_values = context.range_params.creating_a_range(None)
         param_names = list(range_of_values.keys())
-
         grid = list(product(*range_of_values.values()))
         X = np.array(grid, dtype=float)
+        X = self.normalization(X, fit=True)
+        X_train, Y_train = self.hyperparams_random_search(15, range_of_values, context, sim_result, 100, [3, 10],
+                                                          [0.3, 5])
+        X_train_rs = self.normalization(X_train, fit=False)
+        Y_train_rs = list(Y_train)
 
-
-        self.X_min = np.array([min(v) for v in range_of_values.values()])
-        self.X_max = np.array([max(v) for v in range_of_values.values()])
-
-        X = (X - self.X_min) / (self.X_max - self.X_min)
-        D = self.pairwise_distances(X)
-        sigma_kernel = np.median(D)
         visited_idx = []
         y_train = []
+        for x_rs, y_rs in zip(X_train_rs, Y_train_rs):
+
+            # ищем ближайшую точку сетки
+            idx = np.argmin(np.linalg.norm(X - x_rs, axis=1))
+
+            if idx not in visited_idx:
+                visited_idx.append(idx)
+                y_train.append(y_rs)
 
         # ---- first point ----
         first_idx = np.random.randint(len(X))
@@ -392,14 +486,24 @@ class Bayesian_optimization():
 
         y_train.append(first_y)
 
-        for i in range(100):
+        for iteration in range(self.iterations):
             X_train = X[visited_idx]
             y_train_arr = np.array(y_train)
 
-            data = [y_train_arr, X_train]
+            y_mean = np.mean(y_train_arr)
+            y_std = np.std(y_train_arr)
+            if y_std < 1e-12:
+                y_std = 1.0
 
-            mu = self.baesian(data, X, sigma_kernel)
-            sigma = self.distributions(data, X, sigma_kernel)
+            y_train_norm = (y_train_arr - y_mean) / y_std
+
+            data = [y_train_norm, X_train]
+
+            mu = self.baesian(data, X)
+            sigma = self.distributions(data, X)
+            mu = y_mean + y_std * mu
+            sigma = y_std * sigma
+
             print("данные",mu, sigma)
             lcb = self.LCB(mu, sigma)
 
@@ -423,6 +527,7 @@ class Bayesian_optimization():
             visited_idx.append(idx_global)
             y_train.append(next_y)
 
+
             print("next_x:", self.denormalize(X_train), self.denormalize(next_x), "y:", y_train)
 
 
@@ -431,7 +536,8 @@ class Bayesian_optimization():
                     (y_train[-1] - y_train[-2]) /
                     max(abs(y_train[-2]), 1e-3)
                 )
-
+            progress = int((iteration + 1) / self.iterations * 100)
+            progress_queue.put(("progress", progress))
             # ---- finish ----
         best_idx = visited_idx[np.argmin(y_train)]
         print(best_idx)

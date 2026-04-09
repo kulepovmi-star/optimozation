@@ -297,7 +297,15 @@ class Dialog(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(widget)
 
         label = QtWidgets.QLabel("Байесовская оптимизация")
+        self.iterations_spin = QtWidgets.QSpinBox()
+        self.iterations_spin.setRange(1, 10000)
+        self.iterations_spin.setValue(40)
+        self.iterations_spin.setObjectName("iterations")
+        layout.addWidget(QtWidgets.QLabel("Количество итераций"))
+
+
         layout.addWidget(label)
+        layout.addWidget(self.iterations_spin)
 
         layout.addStretch()
         return widget
