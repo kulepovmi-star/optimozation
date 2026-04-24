@@ -61,7 +61,7 @@ class GradientDescent(OptimizationMethod):
 
     epsilon = 1e-6
 
-    def __init__(self, iterations, *,steps= 0.01, l_r=0.04, b1=0.05, b2=0.80):
+    def __init__(self, iterations, *,steps= 0.01, l_r=0.04, b1=0.9, b2=0.99):
         super().__init__(iterations)
         self.step_size = steps
         self.lr = l_r
@@ -117,9 +117,9 @@ class GradientDescent(OptimizationMethod):
 
             sim_result.save_data(base_dir=context.base_dir)
 
-            penalty_base = context.objective.evaluate(
+            penalty_base = np.log(context.objective.evaluate(
                 sim_result, context, new_params
-            )
+            )+1)
 
             gradients = {}
 
@@ -143,22 +143,17 @@ class GradientDescent(OptimizationMethod):
 
                 sim_result.save_data(base_dir=context.base_dir)
 
-                penalty_plus = context.objective.evaluate(
+                penalty_plus = np.log(context.objective.evaluate(
                     sim_result, context, params_plus
-                )
+                )+1)
 
                 gradient = (penalty_plus - penalty_base) / step
-                gradient=max(-50, min(50, gradient))
+                gradient=max(-5, min(5, gradient))
                 gradients[key] = gradient
 
                 gradient_dict[key].append(gradient)
 
-                print(
-                    key,
-                    "grad:", gradient,
-                    "penalty+", penalty_plus,
-                    "base", penalty_base
-                )
+
 
             # 3 обновляем параметры
 
@@ -169,10 +164,19 @@ class GradientDescent(OptimizationMethod):
                 gradient = gradients[key]
 
                 if len(gradient_dict[key])>1 and np.sign(gradient_dict[key][-1]) != np.sign(gradient_dict[key][-2]):
-                    dict_lr[key] = dict_lr[key] / 1.5
+                    dict_lr[key] = dict_lr[key] / 1
 
                 v[key] = self.b1 * v[key] + (1 - self.b1) * gradient
                 G[key] = self.b2 * G[key] + (1 - self.b2) * gradient ** 2
+                print(
+                    key,
+                    "grad:", gradient_dict[key][-1],
+                    "v[key]", v[key],
+                    "G[key]", G[key],
+                )
+
+                v_correction=v[key]/(1-self.b1**iteration)
+                G_correction=G[key]/(1-self.b2**iteration)
 
                 value_norm = (
                                      value - min(range_of_values[key])
@@ -180,7 +184,7 @@ class GradientDescent(OptimizationMethod):
                                      max(range_of_values[key]) - min(range_of_values[key])
                              )
 
-                new_value_norm = value_norm - dict_lr[key] * v[key] / (G[key] + self.epsilon) ** 0.5
+                new_value_norm = value_norm - dict_lr[key] * v_correction / (G_correction + self.epsilon) ** 0.5
 
                 new_value = new_value_norm * (
                         max(range_of_values[key]) - min(range_of_values[key])
@@ -191,7 +195,7 @@ class GradientDescent(OptimizationMethod):
                     min(value + 0.2 * value, new_value)
                 )
                 params.append(new_value)
-                print("величина", params)
+                #print("величина", params)
                 if new_value<min(range_of_values[key]):
                     new_value=min(range_of_values[key])
                 if new_value>max(range_of_values[key]):
@@ -208,7 +212,6 @@ class GradientDescent(OptimizationMethod):
             context.runner.calculation(context.script_processor.build(context.best_params))
         else: print("the parameters are not optimized")
         progress_queue.put(("finished", None))
-
 
 
 class Bayesian_optimization():
@@ -299,20 +302,6 @@ class Bayesian_optimization():
         return dict(zip(param_names, x_vec))
 
     def func(self, x_vec, param_names, context, sim_result):
-        """x, y = x_vec
-
-                # Branin function
-                a = 1.0
-                b = 5.1 / (4 * np.pi ** 2)
-                c = 5 / np.pi
-                r = 6
-                s = 10
-                t = 1 / (8 * np.pi)
-
-                value = a * (y - b * x ** 2 + c * x - r) ** 2 + s * (1 - t) * np.cos(x) + s
-
-                print("penalty:", value)
-                return value"""
         params = self.vector_to_params(x_vec, param_names)
 
         context.runner.calculation(
@@ -329,7 +318,7 @@ class Bayesian_optimization():
         return penalty
 
 
-    def LCB(self,mean, sigma, *, b=1.5):
+    def LCB(self,mean, sigma, *, b=0.5):
         return mean - b * sigma
 
 
@@ -459,13 +448,14 @@ class Bayesian_optimization():
         grid = list(product(*range_of_values.values()))
         X = np.array(grid, dtype=float)
         X = self.normalization(X, fit=True)
-        X_train, Y_train = self.hyperparams_random_search(15, range_of_values, context, sim_result, 100, [3, 10],
+        X_train, Y_train = self.hyperparams_random_search(15, range_of_values, context, sim_result, 100, [3, 15],
                                                           [0.3, 5])
         X_train_rs = self.normalization(X_train, fit=False)
         Y_train_rs = list(Y_train)
 
         visited_idx = []
         y_train = []
+        print("начало алгоритма")
         for x_rs, y_rs in zip(X_train_rs, Y_train_rs):
 
             # ищем ближайшую точку сетки
@@ -485,7 +475,6 @@ class Bayesian_optimization():
         first_y = self.func(first_x_real, param_names, context, sim_result)
 
         y_train.append(first_y)
-
         for iteration in range(self.iterations):
             X_train = X[visited_idx]
             y_train_arr = np.array(y_train)
@@ -494,11 +483,9 @@ class Bayesian_optimization():
             y_std = np.std(y_train_arr)
             if y_std < 1e-12:
                 y_std = 1.0
-
             y_train_norm = (y_train_arr - y_mean) / y_std
 
             data = [y_train_norm, X_train]
-
             mu = self.baesian(data, X)
             sigma = self.distributions(data, X)
             mu = y_mean + y_std * mu

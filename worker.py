@@ -30,7 +30,9 @@ def optimization_process(data, progress_queue):
         "Байесовская оптимизация": Bayesian_optimization
     }[data["method"]]
 
+    print("параметры", data["method_params"])
     method = method_cls(**data["method_params"])
+
 
     params_range = ParameterRangeGenerator(
         data["ranges"],
@@ -41,7 +43,7 @@ def optimization_process(data, progress_queue):
         params=data["params"],
         script_processor=processor,
         runner=runner,
-        objective=objective_cls(),
+        objective=objective_cls(data["constraints"].get("k",100)),
         method=method,
         range_params=params_range,
         constraints=data["constraints"],

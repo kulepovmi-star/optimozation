@@ -266,16 +266,18 @@ class Dialog(QtWidgets.QWidget):
         self.b1 = QtWidgets.QDoubleSpinBox()
         self.b1.setRange(0, 0.9)
         self.b1.setDecimals(2)
-        self.b1.setValue(0.05)
+        self.b1.setValue(0.7)
         self.b1.setSingleStep(0.1)
         self.b1.setObjectName("b1")
 
         self.b2 = QtWidgets.QDoubleSpinBox()
         self.b2.setRange(0, 0.99)
         self.b2.setDecimals(2)
-        self.b2.setValue(0.80)
+        self.b2.setValue(0.90)
         self.b2.setSingleStep(0.1)
         self.b2.setObjectName("b2")
+
+
 
         layout.addWidget(QtWidgets.QLabel("Количество итераций"))
         layout.addWidget(self.iterations_spin)
@@ -289,6 +291,7 @@ class Dialog(QtWidgets.QWidget):
         layout.addWidget(self.b1)
         layout.addWidget(QtWidgets.QLabel("b2"))
         layout.addWidget(self.b2)
+
         layout.addStretch()
         return widget
 
@@ -328,10 +331,18 @@ class Dialog(QtWidgets.QWidget):
         self.max_strain.setObjectName("Displacement")
         self.max_strain.setRange(0, 10e3)
 
+        self.k = QtWidgets.QSpinBox()
+        self.k.setRange(10, 100)
+        self.k.setValue(20)
+        self.k.setSingleStep(1)
+        self.k.setObjectName("k")
+
         layout.addWidget(QtWidgets.QLabel("Предельные напряжения"))
         layout.addWidget(self.max_stress)
         layout.addWidget(QtWidgets.QLabel("Максимальные перемещения"))
         layout.addWidget(self.max_strain)
+        layout.addWidget(QtWidgets.QLabel("Penalty ratio"))
+        layout.addWidget(self.k)
 
         layout.addStretch()
         return widget
@@ -396,7 +407,7 @@ class Dialog(QtWidgets.QWidget):
             "constraints": {
                 **self.get_method_params(current_widget_tasks)
             },
-            "base_dir": base_dir
+            "base_dir": base_dir,
         }
 
         self.queue = Queue()

@@ -13,6 +13,8 @@ class OptimizationFunction(ABC):
     norm_mass = 0
     norm_stress = 0
     norm_strain = 0
+    def __init__(self, k=100):
+        self.k=k
     #меньшее значение - лучше
     @abstractmethod
     def evaluate(self, simulation_result: "SimulationResult", context:"OptimizationContext", best_params):
@@ -22,9 +24,10 @@ class OptimizationFunction(ABC):
 
 class Mass(OptimizationFunction):
     mass = []
+
     # для градиентного спуска нам необходимо работать только с penalty, поскольку на каждой итерации мы стремимся его уменьшить,
     # для работы с методом лучшей пробы нам необходимо записывать параметры проходящие через установленные ограничения как и в градиенте, но записывать только если значение массы, то есть penalty является наименьшим
-    def evaluate(self, simulation_result: "SimulationResult", context:"OptimizationContext", best_params, k=100):
+    def evaluate(self, simulation_result: "SimulationResult", context:"OptimizationContext", best_params, ):
         max_stress_component = max(stress[6] for stress in simulation_result.stress_list)
         max_strain_component = max(max(strain) for strain in simulation_result.strain_list)
         delta_stress= max_stress_component / context.constraints.get("Stress", float("inf"))
@@ -47,7 +50,7 @@ class Mass(OptimizationFunction):
                 violation(delta_disp) ** 2
         )
 
-        penalty = mass_ratio * (1 + k * constraint_penalty)
+        penalty = mass_ratio * (1 + self.k * constraint_penalty)
 
         # сохраняем только допустимые решения
         if constraint_penalty == 0 and self.best_value > simulation_result.mass:
