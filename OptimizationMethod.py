@@ -22,6 +22,41 @@ class OptimizationMethod(ABC):
         а шаг за шагом применяется каждый параметр к расчетной модели, отвечающий цели. """
         pass
 
+class Step_by_step_change(OptimizationMethod):
+    def __init__(self,  steps, iterations=0,):
+        super().__init__(iterations)
+        self.params={}
+        self.steps=steps
+
+
+    def calculation(self, sim_result, context, params):
+        print(params)
+        # context.runner.calculation(context.script_processor.build({**params}))
+        # sim_result.save_data(base_dir=context.base_dir)
+        # context.objective.evaluate(sim_result, context, {**params})
+
+    def substitution(self, sim_result, context, range_of_values, *, name):
+        keys=range_of_values.keys()
+        values=range_of_values.values()
+
+        for combo in product(*values):
+            params=dict(zip(keys, combo))
+            self.calculation(sim_result, context, params)
+
+
+    def optimize(self, context, progress_queue):
+        sim_result = SimulationResult()
+        range_of_values = context.range_params.range_by_step(self.steps)
+        name_params = iter(range_of_values.keys())
+
+        self.substitution(sim_result, context, range_of_values, name=name_params)
+        if context.best_params is not None:
+            context.runner.calculation(context.script_processor.build(context.best_params))
+        else: print("the parameters are not optimized")
+        progress_queue.put(("finished", None))
+
+
+
 
 class BestProbe(OptimizationMethod):
     def optimize(self, context, progress_queue):
@@ -126,8 +161,6 @@ class GradientDescent(OptimizationMethod):
             # 2 вычисляем все градиенты
 
             for key, value in new_params.items():
-
-
                 step = value * dict_step[key]
 
                 max_value = value + step
@@ -538,114 +571,9 @@ class Bayesian_optimization():
         else: print("the parameters are not optimized")
         progress_queue.put(("finished", None))
 
-"""class Bayesian_optimization():
-    def __init__(self, iterations=10):
-        self.iterations = iterations
-        self.delta=float("inf")
 
-    def func(self, x, context,sim_result):
-        context.runner.calculation(
-            context.script_processor.build({"r":x})
-        )
 
-        sim_result.save_data(base_dir=context.base_dir)
 
-        penalty= context.objective.evaluate(
-            sim_result, context, {"r":x}
-        )
-        print("123",penalty)
-        return penalty
-
-    def UCB(self,mean, sigma, *, b=2):
-
-        return mean - b * sigma
-
-    def plot(self,X, Y):
-        plt.plot(X, Y)
-        plt.show()
-
-    def rbf_kernel(self,x_predict, x_init, sigma=1, l=0.3):  # матрица x1*x2
-
-        x_predict = np.atleast_1d(x_predict)
-        x_init = np.atleast_1d(x_init)
-        value = sigma ** 2 * np.exp(-(x_predict[:, None] - x_init[None, :]) ** 2 / (2 * l ** 2))
-        return value
-
-    def inv(self, K, b, jitter=1e-8):
-        K = K.copy()
-        K += jitter * np.eye(len(K))
-        return np.linalg.solve(K, b)
-
-    def baesian(self, data, X_new):
-        y_train, x_train = data
-        covXx = self.rbf_kernel(X_new, x_train)
-        covxx = self.rbf_kernel(x_train, x_train)
-        noise = 1e-3
-        covxx += np.eye(len(covxx)) * noise
-        mu_y = np.mean(y_train)
-        y_std=np.std(y_train)
-        if y_std < 1e-12:
-            y_std = 1.0
-        self.y_std = y_std
-        y_centered=(y_train - mu_y) / y_std
-        #y_centered = y_train - np.full(len(y_train), float(mu_y))
-        qw = self.inv(covxx, y_centered)
-        mu_norm = covXx @ qw
-        mu = mu_y + y_std * mu_norm
-        return mu
-
-    def distributions(self,data, X_new):
-        y_train, x_train = data
-        covXx = self.rbf_kernel(X_new, x_train)
-        covxx = self.rbf_kernel(x_train, x_train)
-        noise = 1e-3
-        covxx += noise * np.eye(len(covxx))
-        covxX = self.rbf_kernel(x_train, X_new)
-        covXX = self.rbf_kernel(X_new, X_new)
-        qw = self.inv(covxx, covxX)
-        sigma = covXX - covXx @ qw
-        sigma = np.sqrt(np.abs(np.diag(sigma)))
-        sigma = self.y_std * sigma
-        return sigma
-
-    def optimize(self, context, progress_queue):
-        sim_result = SimulationResult()
-        range_of_values = context.range_params.creating_a_range(None)
-        new_params = {}
-
-        x = np.asarray(range_of_values.get("r"), dtype=float)
-        data = [[], []]
-        first_x = x[-10]
-        first_y = self.func(first_x, context,sim_result)
-        data[0].append(first_y)
-        data[1].append(first_x)
-        for i in range(20):
-            temporary_data = []
-            temporary_y = self.baesian(data, x)
-            temporary_data.append(temporary_y)
-            temporary_data.append(x)
-            sigma = self.distributions(data, x)
-            temporary_UCB = self.UCB(temporary_y, sigma)
-            #plt.plot(data[1], data[0], label="real")
-            plt.plot(x, temporary_data[0])
-            plt.plot(x, sigma, label="sigma")
-            plt.ylim(-2, 8)
-            visited = np.array(data[1])
-            mask = ~np.isin(x, visited)
-            next_x = x[mask][np.argmin(temporary_UCB[mask])]
-            next_y = self.func(next_x,  context,sim_result)
-            print("x:", data[1], "y:", data[0])
-            print("x:", next_x, "y:", next_y)
-            data[0].append(next_y)
-            data[1].append(next_x)
-            plt.legend()
-            plt.show()
-            self.delta = abs((data[0][-1] - data[0][-2]) / max(data[0][-2], 1e-3))
-        last_y = self.func(data[1][-1], context, sim_result)
-        if context.best_params is not None:
-            context.runner.calculation(context.script_processor.build(context.best_params))
-        else: print("the parameters are not optimized")
-        progress_queue.put(("finished", None))"""
 
 
 
