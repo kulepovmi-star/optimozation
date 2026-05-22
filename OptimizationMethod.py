@@ -23,11 +23,12 @@ class OptimizationMethod(ABC):
         pass
 
 class Step_by_step_change(OptimizationMethod):
-    def __init__(self,  steps, iterations=0,):
+    def __init__(self,  ranges, iterations=0,checkbox=False):
         super().__init__(iterations)
         self.params={}
-        self.steps=steps
-
+        self.ranges=ranges
+        self.checkbox=checkbox
+        print(ranges)
 
     def calculation(self, sim_result, context, params):
         print(params)
@@ -38,18 +39,21 @@ class Step_by_step_change(OptimizationMethod):
     def substitution(self, sim_result, context, range_of_values, *, name):
         keys=range_of_values.keys()
         values=range_of_values.values()
-
-        for combo in product(*values):
-            params=dict(zip(keys, combo))
-            self.calculation(sim_result, context, params)
-
+        if self.checkbox:
+            for combo in product(*values):
+                params=dict(zip(keys, combo))
+                self.calculation(sim_result, context, params)
+        else:
+            for combo in zip(*values):
+                params = dict(zip(keys, combo))
+                self.calculation(sim_result, context, params)
 
     def optimize(self, context, progress_queue):
         sim_result = SimulationResult()
-        range_of_values = context.range_params.range_by_step(self.steps)
-        name_params = iter(range_of_values.keys())
 
-        self.substitution(sim_result, context, range_of_values, name=name_params)
+        name_params = iter(self.ranges.keys())
+
+        self.substitution(sim_result, context, self.ranges, name=name_params)
         if context.best_params is not None:
             context.runner.calculation(context.script_processor.build(context.best_params))
         else: print("the parameters are not optimized")
