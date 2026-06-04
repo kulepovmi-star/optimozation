@@ -32,9 +32,9 @@ class Step_by_step_change(OptimizationMethod):
 
     def calculation(self, sim_result, context, params):
         print(params)
-        # context.runner.calculation(context.script_processor.build({**params}))
-        # sim_result.save_data(base_dir=context.base_dir)
-        # context.objective.evaluate(sim_result, context, {**params})
+        context.runner.calculation(context.script_processor.build({**params}))
+        sim_result.save_data(base_dir=context.base_dir)
+        context.objective.evaluate(sim_result, context, {**params})
 
     def substitution(self, sim_result, context, range_of_values, *, name):
         keys=range_of_values.keys()
@@ -185,7 +185,7 @@ class GradientDescent(OptimizationMethod):
                 )+1)
 
                 gradient = (penalty_plus - penalty_base) / step
-                gradient=max(-5, min(5, gradient))
+                gradient=max(-20, min(20, gradient))
                 gradients[key] = gradient
 
                 gradient_dict[key].append(gradient)

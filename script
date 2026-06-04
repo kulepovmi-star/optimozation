@@ -1,0 +1,53 @@
+## 0.0513034689422365
+reset
+brick x 0.170 y 0.1 z 0.01
+create surface rectangle width 0.5 yplane
+rotate Surface 7 angle 27.35  about Z include_merged
+move Surface 7  y -0.025 include_merged
+webcut volume 1 with plane from surface 7
+delete volume 3
+#{h=0.005}
+create surface rectangle width {h/0.477} height {h} zplane
+move Volume 1  x 0.2 include_merged
+move Surface 7  y 0.025 include_merged preview
+move Surface 7  y 0.025 include_merged
+webcut body 4  with plane from surface 7
+delete Surface 7 20
+tweak vertex 26 22 23 25  fillet radius 0.005
+sweep surface 19  perpendicular distance 0.01  keep
+move Volume 6  z -0.005 include_merged preview
+move Volume 6  z -0.005 include_merged
+move Volume 1  x -0.2 include_merged preview
+move Volume 1  x -0.2 include_merged
+subtract volume 6 from volume 1
+delete Surface 19
+create Cylinder height 0.01 radius 0.005
+create Cylinder height 0.01 radius 0.005
+move Volume  x -0.075 y 0.04 include_merged preview
+move Volume 7 x -0.075 y 0.04 include_merged preview
+move Volume 7 x -0.075 y 0.04 include_merged
+move Volume 8 x -0.075 y -0.04 include_merged preview
+move Volume 8 x -0.075 y -0.04 include_merged
+subtract volume 7 8 from volume 1
+undo group begin
+volume 1 size auto factor 3
+mesh volume 1
+undo group end
+create material 1 from 'Углеродистая сталь'
+set duplicate block elements off
+block 1 add volume 1
+block 'Block 1' material 1 cs 1 category solid order 1
+create displacement on surface 43 44
+modify displacement 1 dof all value 0
+create pressure on surface 5  value 5e+06
+analysis type static elasticity dim3
+static steps 1
+volume 1  size auto factor 2
+delete mesh volume 1  propagate
+undo group begin
+volume 1  size auto factor 2
+mesh volume 1
+undo group end
+create displacement on surface 40 39
+modify displacement 1 dof all value 0
+analysis type static elasticity dim3
