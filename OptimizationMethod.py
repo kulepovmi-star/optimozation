@@ -23,7 +23,7 @@ class OptimizationMethod(ABC):
         pass
 
 class Step_by_step_change(OptimizationMethod):
-    def __init__(self,  ranges, iterations=0,checkbox=False):
+    def __init__(self, ranges, iterations=0,checkbox=False):
         super().__init__(iterations)
         self.params={}
         self.ranges=ranges
@@ -100,13 +100,13 @@ class GradientDescent(OptimizationMethod):
 
     epsilon = 1e-6
 
-    def __init__(self, iterations, *,steps= 0.01, l_r=0.04, b1=0.9, b2=0.99):
+    def __init__(self, iterations, *,steps= 0.01, learning_rate=0.04, b1=0.9, b2=0.99):
         super().__init__(iterations)
         self.step_size = steps
-        self.lr = l_r
+        self.lr = learning_rate
         self.b1=b1
         self.b2=b2
-        print(steps, l_r, b1)
+        print(steps, learning_rate, b1)
 
     # проблемы: +1) динамически уменьшать шаг (теперь не изменяем значение если изменился знак градиента мб не лучшее решение),
     # + 2) неравномерное уменьшение, скачки 3) записываем и дельты и результирующие параметры

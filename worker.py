@@ -17,18 +17,17 @@ def optimization_process(data, progress_queue):
     )
 
     runner = FidesysRunner(data["base_dir"],fidesys)
-
     objective_cls = {
-        "Оптимизация массы":Mass,
-        "Увеличение прочности":Stress,
-        "Повышение жесткости":Strain
+        "Mass":Mass,
+        "Stress":Stress,
+        "Strain":Strain
     }[data["objective"]]
 
     method_cls = {
-        "Метод наилучшей пробы": BestProbe,
-        "Градиентный спуск": GradientDescent,
-        "Байесовская оптимизация": Bayesian_optimization,
-        "Итерация по шагу":Step_by_step_change
+        "Best Probe": BestProbe,
+        "Gradient method": GradientDescent,
+        "Bayesian": Bayesian_optimization,
+        "Step by step":Step_by_step_change
     }[data["method"]]
 
     print("параметры", data["method_params"])
@@ -44,7 +43,7 @@ def optimization_process(data, progress_queue):
         params=data["params"],
         script_processor=processor,
         runner=runner,
-        objective=objective_cls(data["constraints"].get("k",100)),
+        objective=objective_cls(),
         method=method,
         range_params=params_range,
         constraints=data["constraints"],
