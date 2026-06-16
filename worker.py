@@ -30,13 +30,12 @@ def optimization_process(data, progress_queue):
         "Step by step":Step_by_step_change
     }[data["method"]]
 
-    print("параметры", data["method_params"])
     method = method_cls(**data["method_params"])
 
 
     params_range = ParameterRangeGenerator(
         data["ranges"],
-        100
+        data["grid"]
     )
 
     context = OptimizationContext(

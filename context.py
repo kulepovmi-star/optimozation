@@ -1,7 +1,7 @@
 from parameter_range import ParameterRangeGenerator
 from creationscript import ScriptProcessor
 from runner import FidesysRunner
-from OptimizationMethod import OptimizationMethod
+from OptimizationMethod_old import OptimizationMethod
 from typing import Dict, Tuple, List, TYPE_CHECKING
 if TYPE_CHECKING:
     from ObjectiveFunction import OptimizationFunction

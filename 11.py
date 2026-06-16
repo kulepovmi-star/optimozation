@@ -8,7 +8,7 @@ from context import OptimizationContext
 from creationscript import ScriptProcessor
 from runner import FidesysRunner
 from ObjectiveFunction import Mass, Strain, Stress
-from OptimizationMethod import GradientDescent, BestProbe
+from OptimizationMethod_old import GradientDescent, BestProbe
 from parameter_range import ParameterRangeGenerator
 import numpy as np
 

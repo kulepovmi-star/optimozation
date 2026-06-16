@@ -14,17 +14,17 @@ from worker import optimization_process
 
 class MainWindow(QMainWindow):
 
-    def __init__(self,params,script):
+    def __init__(self,params,script, base_dir):
         super().__init__()
         self.params = params
         self.script=script
         self.setup_ui()
         self.set_params()
-        self.base_dir = os.path.dirname(os.path.abspath(__file__))  # Директория где лежит скрипт
+        self.base_dir = base_dir # Директория где лежит скрипт
 
 
     def setup_ui(self):
-        self.resize(400, 570)
+        self.resize(450, 570)
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
         # main layout
@@ -124,6 +124,7 @@ class MainWindow(QMainWindow):
         method = self.method_stack.currentWidget()
         objective = self.purpose_stack.currentWidget()
         table=self.get_current_table()
+
         data = {
             "script": self.script,
             "params": self.main_table.table.get_params(),
@@ -135,8 +136,9 @@ class MainWindow(QMainWindow):
                 **objective.get_setting()
             },
             "base_dir": self.base_dir,
+            "grid":method.get_grid()
             }
-        print(data)
+
 
         self.queue = Queue()
 

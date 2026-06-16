@@ -11,7 +11,7 @@ class MassObjectiveWidget(QWidget):
         self.max_stress = QtWidgets.QDoubleSpinBox()
         layout.addWidget(QLabel("Stress"))
         self.max_stress.setRange(0, 10e20)
-        self.max_stress.setSingleStep(100000)
+        self.max_stress.setSingleStep(1000000)
         layout.addWidget(self.max_stress)
 
         self.max_strain = QtWidgets.QDoubleSpinBox()

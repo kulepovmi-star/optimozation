@@ -15,6 +15,7 @@ class TableParamsWidget(QtWidgets.QWidget):
 
         # Устанавливаем ширину колонок
         self.table.setColumnWidth(0, 130)  # Первая колонка шире
+        self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
 
         #  КНОПКИ УПРАВЛЕНИЯ ТАБЛИЦЕЙ
         button_layout = QtWidgets.QHBoxLayout()

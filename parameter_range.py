@@ -17,9 +17,12 @@ class ParameterRangeGenerator:
     @creating_a_range.register(type(None))
     def _(self, arg: None) -> Dict[str, List[float]]:
         range_dict = {}
-        for key, (min_val, max_val) in self.changeable_parameters.items():
-            range_dict[key] = list(np.linspace(min_val, max_val, self.steps))
-        return range_dict
+        if self.steps:
+            for key, (min_val, max_val) in self.changeable_parameters.items():
+                range_dict[key] = list(np.linspace(min_val, max_val, self.steps))
+            return range_dict
+        else:
+            return self.changeable_parameters
 
     @creating_a_range.register(dict)
     def _(self, best_params: Dict[str, float]) -> Dict[str, List[float]]:
