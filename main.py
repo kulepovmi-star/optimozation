@@ -1,6 +1,7 @@
 import sys  # Cистемная библиотека
 import os  # Cистемная библиотека
-import GUI
+from GUI.gui_main import MainWindow
+import GUIold
 from PySide6 import QtWidgets
 from jou_reader import JouReader
 
@@ -13,13 +14,12 @@ if __name__ == "__main__":
     multiprocessing.freeze_support()
 
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(current_dir, 'первый тест', 'банер')
+    file_path = os.path.join(current_dir, "script")
     reader = JouReader(file_path)
     app=QtWidgets.QApplication(sys.argv)
     script, params = reader.read()
-    widget=GUI.Dialog()
-    widget.set_script(script)
-    widget.set_params(params)
+    base_dir=os.path.dirname(os.path.abspath(__file__))
+    widget = MainWindow(params,script,base_dir)
     widget.show()
     sys.exit(app.exec())
 

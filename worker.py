@@ -4,7 +4,7 @@ from creationscript import ScriptProcessor
 from runner import FidesysRunner
 from parameter_range import ParameterRangeGenerator
 from ObjectiveFunction import Mass, Strain, Stress
-from OptimizationMethod import GradientDescent, BestProbe, Bayesian_optimization
+from OptimizationMethod import GradientDescent, BestProbe, Bayesian_optimization, Step_by_step_change
 import time
 
 def optimization_process(data, progress_queue):
@@ -17,24 +17,25 @@ def optimization_process(data, progress_queue):
     )
 
     runner = FidesysRunner(data["base_dir"],fidesys)
-
     objective_cls = {
-        "Оптимизация массы":Mass,
-        "Увеличение прочности":Stress,
-        "Повышение жесткости":Strain
+        "Mass":Mass,
+        "Stress":Stress,
+        "Strain":Strain
     }[data["objective"]]
 
     method_cls = {
-        "Метод наилучшей пробы": BestProbe,
-        "Градиентный спуск": GradientDescent,
-        "Байесовская оптимизация": Bayesian_optimization
+        "Best Probe": BestProbe,
+        "Gradient method": GradientDescent,
+        "Bayesian": Bayesian_optimization,
+        "Step by step":Step_by_step_change
     }[data["method"]]
 
     method = method_cls(**data["method_params"])
 
+
     params_range = ParameterRangeGenerator(
         data["ranges"],
-        100
+        data["grid"]
     )
 
     context = OptimizationContext(

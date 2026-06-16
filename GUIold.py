@@ -1,5 +1,5 @@
 from PySide6 import QtGui, QtCore, QtWidgets
-from PySide6.QtWidgets import QPushButton, QMessageBox
+from PySide6.QtWidgets import QPushButton, QMessageBox, QCheckBox, QApplication, QWidget, QVBoxLayout
 from collections import defaultdict
 import os
 from multiprocessing import Process, Queue
@@ -8,11 +8,12 @@ from context import OptimizationContext
 from creationscript import ScriptProcessor
 from runner import FidesysRunner
 from ObjectiveFunction import Mass, Strain, Stress
-from OptimizationMethod import GradientDescent, BestProbe, Bayesian_optimization
+from OptimizationMethod_old import GradientDescent, BestProbe, Bayesian_optimization, Step_by_step_change
 from parameter_range import ParameterRangeGenerator
 import numpy as np
 
 base_dir = os.path.dirname(os.path.abspath(__file__))  # Директория где лежит скрипт
+
 
 class OptimizationWorker(QtCore.QObject):
     finished = QtCore.Signal()
@@ -32,6 +33,35 @@ class OptimizationWorker(QtCore.QObject):
     def stop(self):
         self._running = False
 
+
+class TableWindow(QtWidgets.QDialog):
+    def __init__(self,params, data_table, ):
+        super().__init__()
+        self.saved_data=None
+        layout = QtWidgets.QVBoxLayout()
+        self.setWindowTitle("Таблица")
+        self.setFixedSize(600, 300)
+
+        self.data_table=data_table
+        self.Table_steps = TableStepWidget(self)
+        self.Table_steps.vbox.setContentsMargins(0, 0, 0, 0)
+        self.Table_steps.table.params_on_table(params, data_table)
+        layout.addWidget(self.Table_steps)
+        self.save = QtWidgets.QPushButton("Сохранить")
+        self.save.clicked.connect(self.on_save)
+        layout.addWidget(self.save)
+        self.setLayout(layout)
+
+
+    def get_data(self):
+        return self.saved_data
+
+    def on_save(self):
+        self.saved_data=self.Table_steps.save_data()
+        self.accept()
+
+
+
 class TableParams(QtWidgets.QTableWidget):
     def __init__(self, parent=None):
         QtWidgets.QTableWidget.__init__(self, parent)
@@ -48,23 +78,82 @@ class TableParams(QtWidgets.QTableWidget):
             self.setItem(row, 0, item)  # только колонка 0
 
     def del_item(self):
-
         for row, _ in enumerate(self.params):
             for i in [1, 2]:
                 self.takeItem(row, i)
 
     def get_data(self):
         data = {}
-
         for row in range(self.rowCount()):
             data[self.item(row, 0).text()] = []
             for column in range(1, self.columnCount()):
-                data[self.item(row, 0).text()].append(self.item(row, column).text())
+                try:
+                    data[self.item(row, 0).text()].append(float(self.item(row, column).text()))
+                except:
+                    QMessageBox.critical(self, "Ошибка", "Введите данные числом")
+                    data[self.item(row, 0).text()] = False
+                    return data
+            if sorted(data[self.item(row, 0).text()])!=data[self.item(row, 0).text()]:
+                QMessageBox.critical(self, "Ошибка", "Введите корректный интервал")
+                data[self.item(row, 0).text()]=False
+                return data
         return data
 
     def get_params(self):
         return self.params
 
+    def set_params_on_table(self, data):
+        print(data)
+        for row, value in enumerate(self.params):
+            item = QtWidgets.QTableWidgetItem(value)
+            self.setItem(row, 0, item)  # только колонка 0
+            item_min = QtWidgets.QTableWidgetItem(str(min(data[value])))
+            self.setItem(row, 1, item_min)  # только колонка 0
+            tem_max = QtWidgets.QTableWidgetItem(str(max(data[value])))
+            self.setItem(row, 2, tem_max)  # только колонка 0
+
+class Table_step_by_step(TableParams):
+    def __init__(self, parent=None):
+
+        super().__init__(parent)
+        self.params = None
+        self.setColumnCount(2)
+        header_labels = ["Params", "value 1"]
+        self.setHorizontalHeaderLabels(header_labels)
+
+    def params_on_table(self, params, data_table=None):
+        self.params = params
+        self.setRowCount(len(self.params))
+        if not data_table:
+            for row, value in enumerate(self.params):
+                item = QtWidgets.QTableWidgetItem(value)
+                self.setItem(row, 0, item)  # только колонка 0
+        else:
+            self.setRowCount(len(data_table["ranges"]))
+            self.setColumnCount(max(len(v) for v in data_table["ranges"].values()) + 1)
+            for id, (key, values) in enumerate(data_table["ranges"].items()):
+                item = QtWidgets.QTableWidgetItem(key)
+                self.setItem(id, 0, item)  # только колонка 0
+                for column, value in enumerate(values):
+                    item = QtWidgets.QTableWidgetItem(str(value))
+                    self.setItem(id, column+1, item)
+
+
+    def get_data(self):
+        data = defaultdict(list)
+        for row in range(self.rowCount()):
+            for column in range(1, self.columnCount()):
+
+                try:
+                    data[self.item(row, 0).text()].append(float(self.item(row, column).text()))
+
+                except:
+                    QMessageBox.critical(self, "Ошибка", "Введите данные числом")
+                    data.update({self.item(row, 0).text(): False})
+                    return {"ranges": False}
+
+        print("1111111111111111111")
+        return {"ranges": data}
 
 class TableParamsWidget(QtWidgets.QWidget):
     def __init__(self, parent=None):
@@ -94,24 +183,58 @@ class TableParamsWidget(QtWidgets.QWidget):
         self.add_row_btn.clicked.connect(self.clean)
 
     def save_data(self):
-        new_dict = defaultdict(list)
         data = self.table.get_data()
-        for key, value in data.items():
-            for i in value:
-                value = float(i)
-                new_dict[key].append(value)
-        return new_dict
+        return data
 
     def clean(self):
         self.table.del_item()
 
+class TableStepWidget(QtWidgets.QWidget):
+    def __init__(self, parent=None):
+        QtWidgets.QWidget.__init__(self, parent)
+        self.vbox = QtWidgets.QVBoxLayout()
+        self.label_table = QtWidgets.QLabel("Установите диапазон параметров")
+        self.table = Table_step_by_step(self)
+
+        # Настройка таблицы
+        self.table.horizontalHeader().setStretchLastSection(True)  # Растягивать последнюю колонку
+        self.table.setAlternatingRowColors(True)  # Чередование цветов строк
+
+        # Устанавливаем ширину колонок
+        self.table.setColumnWidth(0, 130)  # Первая колонка шире
+
+        button_layout = QtWidgets.QHBoxLayout()
+        btn_add = QPushButton("добавить столбец")
+        btn_del = QPushButton("удалить столбец")
+        self.vbox.addWidget(self.table)
+        btn_add.clicked.connect(self.add_column)
+        btn_del.clicked.connect(self.del_column)
+        button_layout.addWidget(btn_add)
+        button_layout.addWidget(btn_del)
+        self.vbox.addLayout(button_layout)
+        self.setLayout(self.vbox)
+
+    def save_data(self):
+        return self.table.get_data()
+
+    def add_column(self):
+        col = self.table.columnCount() # текущее число столбцов
+        self.table.insertColumn(col)  # вставляем новый
+        self.table.setHorizontalHeaderItem(
+            col,
+            QtWidgets.QTableWidgetItem(f"value {col}"))
+
+    def del_column(self):
+        col = self.table.columnCount()
+        if col > 1:
+            self.table.removeColumn(col - 1)
 
 class Dialog(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         self.script = None
         self.setFixedSize(400, 600)  # Ширина 400, высота 300
-
+        self.data_step_by_step={}
         self.TableParamsWidget = TableParamsWidget(self)
         self.combo1 = QtWidgets.QComboBox()
         self.combo2 = QtWidgets.QComboBox()
@@ -149,7 +272,8 @@ class Dialog(QtWidgets.QWidget):
         self.combo1.addItems([
             "Метод наилучшей пробы",
             "Градиентный спуск",
-            "Байесовская оптимизация"
+            "Байесовская оптимизация",
+            "Итерация по шагу"
         ])
 
         self.combo2.addItems([
@@ -180,6 +304,7 @@ class Dialog(QtWidgets.QWidget):
         self.method_stack.addWidget(self.widget_best_probe())
         self.method_stack.addWidget(self.widget_gradient())
         self.method_stack.addWidget(self.widget_bayesian())
+        self.method_stack.addWidget(self.widget_step_by_step())
 
         layout.addWidget(self.method_stack)
 
@@ -218,6 +343,14 @@ class Dialog(QtWidgets.QWidget):
         # числа с плавающей точкой
         for child in current_widget.findChildren(QtWidgets.QDoubleSpinBox):
             params[child.objectName()] = child.value()
+
+
+        for table in current_widget.findChildren(QtWidgets.QTableWidget):
+            params_step=table.get_data()
+            params.update(params_step)
+
+        for checkbox in current_widget.findChildren(QtWidgets.QCheckBox):
+            params.update({"checkbox":checkbox.isChecked()})
 
         return params
 
@@ -266,14 +399,14 @@ class Dialog(QtWidgets.QWidget):
         self.b1 = QtWidgets.QDoubleSpinBox()
         self.b1.setRange(0, 0.9)
         self.b1.setDecimals(2)
-        self.b1.setValue(0.05)
+        self.b1.setValue(0.7)
         self.b1.setSingleStep(0.1)
         self.b1.setObjectName("b1")
 
         self.b2 = QtWidgets.QDoubleSpinBox()
         self.b2.setRange(0, 0.99)
         self.b2.setDecimals(2)
-        self.b2.setValue(0.80)
+        self.b2.setValue(0.90)
         self.b2.setSingleStep(0.1)
         self.b2.setObjectName("b2")
 
@@ -289,6 +422,7 @@ class Dialog(QtWidgets.QWidget):
         layout.addWidget(self.b1)
         layout.addWidget(QtWidgets.QLabel("b2"))
         layout.addWidget(self.b2)
+
         layout.addStretch()
         return widget
 
@@ -310,6 +444,19 @@ class Dialog(QtWidgets.QWidget):
         layout.addStretch()
         return widget
 
+    def widget_step_by_step(self):
+        checkbox = QCheckBox("Рассматривать все комбинации")
+        table_button=QPushButton("Установить значения параметров")
+        table_button.clicked.connect(self.show_table)
+        widget = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(widget)
+        label = QtWidgets.QLabel("Изменять с шагом")
+        layout.addWidget(label)
+        layout.addWidget(table_button)
+        layout.addWidget(checkbox)
+        layout.addStretch()
+        return widget
+
 
 
     def task_mass(self):
@@ -328,10 +475,18 @@ class Dialog(QtWidgets.QWidget):
         self.max_strain.setObjectName("Displacement")
         self.max_strain.setRange(0, 10e3)
 
+        self.k = QtWidgets.QSpinBox()
+        self.k.setRange(10, 100)
+        self.k.setValue(20)
+        self.k.setSingleStep(1)
+        self.k.setObjectName("k")
+
         layout.addWidget(QtWidgets.QLabel("Предельные напряжения"))
         layout.addWidget(self.max_stress)
         layout.addWidget(QtWidgets.QLabel("Максимальные перемещения"))
         layout.addWidget(self.max_strain)
+        layout.addWidget(QtWidgets.QLabel("Penalty ratio"))
+        layout.addWidget(self.k)
 
         layout.addStretch()
         return widget
@@ -385,31 +540,35 @@ class Dialog(QtWidgets.QWidget):
     def on_clicked(self):
         current_widget_settings = self.method_stack.currentWidget()
         current_widget_tasks = self.method_stack_task.currentWidget()
+        if False in [1]:#*self.get_method_params(current_widget_settings).values(), *self.get_method_params(current_widget_tasks).values(), *self.TableParamsWidget.save_data().values()]:
+            print("Не пущу",self.get_method_params(current_widget_settings).values())
+        else:
+            print(self.TableParamsWidget.save_data())
+            data = {
+                "script": self.script,
+                "params": self.TableParamsWidget.table.get_params(),
+                "ranges": self.TableParamsWidget.save_data(),
+                "method": self.combo1.currentText(),
+                "objective": self.combo2.currentText(),
+                "method_params": {**self.get_method_params(current_widget_settings), **self.data_step_by_step},
+                "constraints": {
+                    **self.get_method_params(current_widget_tasks)
+                },
+                "base_dir": base_dir,
+            }
+            print(data)
 
-        data = {
-            "script": self.script,
-            "params": self.TableParamsWidget.table.get_params(),
-            "ranges": self.TableParamsWidget.save_data(),
-            "method": self.combo1.currentText(),
-            "objective": self.combo2.currentText(),
-            "method_params": self.get_method_params(current_widget_settings),
-            "constraints": {
-                **self.get_method_params(current_widget_tasks)
-            },
-            "base_dir": base_dir
-        }
+            self.queue = Queue()
 
-        self.queue = Queue()
+            self.process = Process(
+                target=optimization_process,
+                args=(data, self.queue)
+            )
 
-        self.process = Process(
-            target=optimization_process,
-            args=(data, self.queue)
-        )
-
-        self.process.start()
-        self.timer = QtCore.QTimer()
-        self.timer.timeout.connect(self.check_queue)
-        self.timer.start(100)
+            self.process.start()
+            self.timer = QtCore.QTimer()
+            self.timer.timeout.connect(self.check_queue)
+            self.timer.start(100)
 
     def check_queue(self):
 
@@ -430,7 +589,9 @@ class Dialog(QtWidgets.QWidget):
 
 
     def set_params(self, params):
-        return self.TableParamsWidget.table.params_on_table(params)
+        self.params=params
+        self.TableParamsWidget.table.params_on_table(params)
+
 
     def set_script(self, script):
         self.script=script
@@ -465,11 +626,22 @@ class Dialog(QtWidgets.QWidget):
     def get_method(self):
         methods = {"Метод наилучшей пробы": BestProbe,
                    "Градиентный спуск": GradientDescent,
-                   "Байесовская оптимизация": Bayesian_optimization}
+                   "Байесовская оптимизация": Bayesian_optimization,
+                   "Итерация по шагу":Step_by_step_change}
         return methods[self.combo1.currentText()]
 
     def get_task(self):
         tasks = {"Оптимизация массы":Mass, "Увеличение прочности":Stress, "Повышение жесткости":Strain}
         return tasks[self.combo2.currentText()]
+
+    def show_table(self):
+        dialog = TableWindow(self.params, self.data_step_by_step)
+        dialog.exec_()  # модальное окно
+        if dialog.exec():
+            data=dialog.get_data()
+            self.data_step_by_step.update({**data})
+            self.TableParamsWidget.table.set_params_on_table({**data["ranges"]})
+
+
 
 
