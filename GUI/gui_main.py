@@ -20,6 +20,7 @@ class MainWindow(QMainWindow):
         self.script=script
         self.setup_ui()
         self.set_params()
+        self.process = None
         self.base_dir = base_dir # Директория где лежит скрипт
 
 
@@ -78,9 +79,14 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.step_step)
         self.step_step.hide()
         layout.addWidget(self.main_table)
-        self.button = QtWidgets.QPushButton("&Начать оптимизацию")
+        self.button = QtWidgets.QPushButton("&Start")
         self.button.clicked.connect(self.start)
-        layout.addWidget(self.button)
+        self.stop_button = QtWidgets.QPushButton("&Stop")
+        self.stop_button.clicked.connect(self.stop)
+        button_layout = QtWidgets.QHBoxLayout()
+        button_layout.addWidget(self.stop_button)
+        button_layout.addWidget(self.button)
+        layout.addLayout(button_layout)
         self.progress_bar = QtWidgets.QProgressBar()
         self.progress_bar.setRange(0, 100)
         self.progress_bar.setValue(0)
@@ -92,6 +98,7 @@ class MainWindow(QMainWindow):
 
         self.step_step.setVisible(is_step)
         self.main_table.setVisible(not is_step)
+
     def setup_objective_tab(self):
         layout = QVBoxLayout(self.objective_tab)
         layout.addWidget(QLabel("Настройки целевой функции"))
@@ -120,37 +127,64 @@ class MainWindow(QMainWindow):
         layout.addStretch()
 
     def start(self):
-        self.progress_bar.setValue(1)
+
         method = self.method_stack.currentWidget()
         objective = self.purpose_stack.currentWidget()
         table=self.get_current_table()
+        if table.check_data():
+            self.progress_bar.setValue(1)
+            data = {
+                "script": self.script,
+                "params": self.main_table.table.get_params(),
+                "ranges": table.save_data(),
+                "method": self.method_combo.currentText(),
+                "objective": self.purpose_combo.currentText(),
+                "method_params": {**method.get_setting()},
+                "constraints": {
+                    **objective.get_setting(), **objective.get_buckling()
+                },
+                "base_dir": self.base_dir,
+                "grid":method.get_grid()
+                }
 
-        data = {
-            "script": self.script,
-            "params": self.main_table.table.get_params(),
-            "ranges": table.save_data(),
-            "method": self.method_combo.currentText(),
-            "objective": self.purpose_combo.currentText(),
-            "method_params": {**method.get_setting()},
-            "constraints": {
-                **objective.get_setting()
-            },
-            "base_dir": self.base_dir,
-            "grid":method.get_grid()
-            }
 
+            self.queue = Queue()
 
-        self.queue = Queue()
+            self.process = Process(
+                target=optimization_process,
+                args=(data, self.queue)
+            )
 
-        self.process = Process(
-            target=optimization_process,
-            args=(data, self.queue)
+            self.process.start()
+            self.timer = QtCore.QTimer()
+            self.timer.timeout.connect(self.check_queue)
+            self.timer.start(100)
+        else:
+            QMessageBox.information(
+                self,
+                "Информация",
+                "Введите корректные данные"
+            )
+
+    def stop(self):
+        reply = QMessageBox.question(
+            self,
+            'Подтверждение остановки',
+            'Вы действительно хотите остановить процесс?',
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
         )
 
-        self.process.start()
-        self.timer = QtCore.QTimer()
-        self.timer.timeout.connect(self.check_queue)
-        self.timer.start(100)
+        if reply == QMessageBox.Yes:
+            try:
+                self.progress_bar.setValue(0)
+                if self.process and self.process.is_alive():
+                    self.process.terminate()
+                    self.process.join(timeout=2)
+                    print("Оптимизация остановлена")
+            except Exception as e:
+                print("Ошибка завершения:", e)
+
 
     def get_current_table(self):
         if self.method_combo.currentIndex() == 3:
@@ -181,6 +215,7 @@ class MainWindow(QMainWindow):
             event.accept()
         else:
             event.ignore()
+
     def check_queue(self):
 
         while not self.queue.empty():

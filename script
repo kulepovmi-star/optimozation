@@ -24,4 +24,3 @@ create displacement on surface 2
 modify displacement 1 dof all value 0
 create pressure on surface 17  value 10000
 block 'Block 1' material 1 cs 1 category solid order 1
-analysis type static elasticity dim3

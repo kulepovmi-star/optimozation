@@ -30,8 +30,14 @@ class Mass(OptimizationFunction):
 
         max_stress_component = max(stress[6] for stress in simulation_result.stress_list)
         max_strain_component = max(max(strain) for strain in simulation_result.strain_list)
+        eigenvalue=simulation_result.eigenvalue
         delta_stress= max_stress_component / context.constraints.get("stress")
         delta_disp = max_strain_component / context.constraints.get("displacement")
+
+        if eigenvalue:
+            delta_eigenvalue=eigenvalue/ context.constraints.get("stock_ratio_buckling")
+        else:
+            delta_eigenvalue=0
 
         # приводим массу к порядку 1
         if not self.norm_mass:
@@ -42,21 +48,15 @@ class Mass(OptimizationFunction):
         self.mass.append(mass_ratio)
         print("mass_ratio", self.mass)
 
-        # def violation(r):
-        #     return max(0.0, r - 1.0)
-        #
-        # constraint_penalty = (
-        #         violation(delta_stress) ** 2 +
-        #         violation(delta_disp) ** 2
-        # )
 
-        #penalty = mass_ratio * (1 + context.constraints.get("penalty") * constraint_penalty)
         def violation(r):
             if r <= 1.0:
                 return 0.0
             return np.log(context.constraints.get("penalty") * (r-1)**2+1)
-
-        constraint_penalty = violation(delta_stress)  + violation(delta_disp)
+        print(delta_stress)
+        print(delta_disp)
+        print(delta_eigenvalue)
+        constraint_penalty = violation(delta_stress)  + violation(delta_disp) + violation(delta_eigenvalue)
 
         # масса нормирована, constraint_penalty плавно растёт от 0
         penalty = mass_ratio + constraint_penalty
@@ -106,7 +106,6 @@ class Stress(OptimizationFunction):
             print("записали")
             self.best_value = max_stress_component
             context.best_params = best_params
-
         return penalty
 
 class Strain(OptimizationFunction):

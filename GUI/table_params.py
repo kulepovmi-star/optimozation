@@ -21,7 +21,7 @@ class TableParamsWidget(QtWidgets.QWidget):
         button_layout = QtWidgets.QHBoxLayout()
         self.add_row_btn = QtWidgets.QPushButton("Очистить")
         self.save_btn = QtWidgets.QPushButton("Сохранить")
-        self.save_btn.clicked.connect(self.save_data)
+        #self.save_btn.clicked.connect(self.check_data)
         button_layout.addWidget(self.add_row_btn)
         button_layout.addWidget(self.save_btn)
         self.vbox.addWidget(self.label_table)
@@ -32,10 +32,31 @@ class TableParamsWidget(QtWidgets.QWidget):
 
     def save_data(self):
         data = self.table.get_data()
-        return data
+        true_data = {}
+        for k, v in data.items():
+            true_data[k]=[]
+            for i in v:
+                true_data[k].append(float(i))
+        return true_data
 
     def clean(self):
         self.table.del_item()
+
+    def check_data(self):
+        data = self.table.get_data()
+        for k, v in data.items():
+            for i in v:
+                try:
+                    float(i)
+                except:
+                    print(i)
+                    return False
+            if v.index(min(v, key=float))==0:
+                print(v)
+                pass
+            else:
+                return False
+        return True
 
 
 class TableParams(QtWidgets.QTableWidget):
@@ -63,7 +84,9 @@ class TableParams(QtWidgets.QTableWidget):
         for row in range(self.rowCount()):
             data[self.item(row, 0).text()] = []
             for column in range(1, self.columnCount()):
-                    data[self.item(row, 0).text()].append(float(self.item(row, column).text()))
+                if self.item(row, column):
+                    data[self.item(row, 0).text()].append(self.item(row, column).text())
+                else: data[self.item(row, 0).text()].append("empty_value")
         return data
 
     def get_params(self):
@@ -77,4 +100,5 @@ class TableParams(QtWidgets.QTableWidget):
             self.setItem(row, 1, item_min)  # только колонка 0
             tem_max = QtWidgets.QTableWidgetItem(str(max(data[value])))
             self.setItem(row, 2, tem_max)  # только колонка 0
+
 

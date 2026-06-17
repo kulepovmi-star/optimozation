@@ -5,9 +5,10 @@ import os
 
 class SimulationResult:
 
-    mass = None
-    stress_list = None
-    strain_list = None
+    mass = 0
+    stress_list = 0
+    strain_list = 0
+    eigenvalue = 0
 
 
     def point_data(self, base_dir:str):
@@ -33,11 +34,18 @@ class SimulationResult:
                     break
         return mass
 
-    def save_data(self, base_dir:str):
+    def save_data_static(self, base_dir:str):
         point_data, self.mass=self.point_data(base_dir)
         self.stress_list = vtk_to_numpy(point_data.GetArray("Stress"))  # Считываем напряжения из массива результатов
         self.strain_list = vtk_to_numpy(point_data.GetArray("Displacement"))
         return self
+
+    def save_data_buckling(self, base_dir:str):
+        point_data, _=self.point_data(base_dir)
+        self.eigenvalue = vtk_to_numpy(point_data.GetArray("Displacement"))
+        return self
+
+
 
 
 
