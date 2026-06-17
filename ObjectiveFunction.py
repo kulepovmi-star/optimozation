@@ -34,7 +34,7 @@ class Mass(OptimizationFunction):
         delta_stress= max_stress_component / context.constraints.get("stress")
         delta_disp = max_strain_component / context.constraints.get("displacement")
 
-        if eigenvalue:
+        if context.constraints.get("buckling"):
             delta_eigenvalue=eigenvalue/ context.constraints.get("stock_ratio_buckling")
         else:
             delta_eigenvalue=0
