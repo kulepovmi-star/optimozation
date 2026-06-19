@@ -37,13 +37,14 @@ class OptimizationMethod(ABC):
 
     def calculation(self, sim_result, context, params):
         print("устойчивость",context.constraints.get("buckling"))
-        print(params)
+
         context.runner.calculation_static(context.script_processor.build({**params}))
         sim_result.save_data_static(base_dir=context.base_dir)
         if context.constraints.get("buckling"):
             context.runner.calculation_buckling(context.script_processor.build({**params}))
             sim_result.save_data_buckling(base_dir=context.base_dir)
         penalty=context.objective.evaluate(sim_result, context, {**params})
+        print(params)
         print("penalty", penalty)
         return float(penalty)
 
@@ -122,12 +123,13 @@ class GradientDescent(OptimizationMethod):
 
     epsilon = 1e-6
 
-    def __init__(self, iterations, *,steps= 0.01, learning_rate=0.04, b1=0.9, b2=0.99):
+    def __init__(self, iterations, *,steps, learning_rate, b1, b2, iter_no_update):
         super().__init__(iterations)
         self.step_size = steps
         self.lr = learning_rate
         self.b1=b1
         self.b2=b2
+        self.iter_no_update=iter_no_update
         print(steps, learning_rate, b1)
 
     # проблемы: +1) динамически уменьшать шаг (теперь не изменяем значение если изменился знак градиента мб не лучшее решение),
@@ -136,14 +138,29 @@ class GradientDescent(OptimizationMethod):
     # +4) неадекватный l_r, нужно как-то подбирать его в зависимости от параметра и диапазона, при смене знака градиент почти всегда улетает за 1.5, костыли и много if
     # 5) не останавливается при достижении необходимого количества итераций
     # 6) в идеале не брать значения на концах
+    def checker(self):
+        i = 0
+        value = float("inf")
 
+        def condition(new_arr):
+            nonlocal i
+            nonlocal value
+            best_value = min(new_arr)
+            if value <= best_value:
+                i += 1
+            else:
+                i = 0
+                value = best_value
+            return i <= self.iter_no_update
+
+        return condition
     # рекомендации, при сильном изменении параметра уменьшать шаг
     def optimize(self, context, progress_queue):
         params=[]
         sim_result = SimulationResult()
 
         range_of_values = context.range_params.creating_a_range(None)
-
+        can_continue = self.checker()
         new_params = {}
         gradient_dict = {}
         dict_step = {}
@@ -153,7 +170,7 @@ class GradientDescent(OptimizationMethod):
         G = {}
 
         for key, value in range_of_values.items():
-            new_params[key] = random.choice(value)
+            new_params[key] = np.mean(value)
 
             gradient_dict[key] = []
 
@@ -163,16 +180,15 @@ class GradientDescent(OptimizationMethod):
             v[key] = 0
             G[key] = 0
 
-        iteration = 0
 
-        while iteration < self.iterations:
 
-            iteration += 1
+        for iteration in range(self.iterations):
+            all_penalty = []
             print("iteration", iteration)
 
             # 1 базовый расчет
             penalty_base = self.calculation(sim_result, context, new_params)
-
+            all_penalty.append(penalty_base)
             gradients = {}
 
             # 2 вычисляем все градиенты
@@ -189,8 +205,8 @@ class GradientDescent(OptimizationMethod):
                 gradient = (penalty_plus - penalty_base) / step
                 gradient=max(-5, min(5, gradient))
                 gradients[key] = gradient
-
                 gradient_dict[key].append(gradient)
+                all_penalty.append(penalty_plus)
 
             # 3 обновляем параметры
 
@@ -244,7 +260,8 @@ class GradientDescent(OptimizationMethod):
             new_params = temporal_params
             progress = int((iteration) / self.iterations * 100)
             progress_queue.put(("progress", progress))
-
+            if not can_continue(all_penalty):
+                break
         if context.best_params is not None:
             context.runner.calculation_static(context.script_processor.build(context.best_params))
         else: print("the parameters are not optimized")

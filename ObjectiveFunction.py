@@ -35,7 +35,7 @@ class Mass(OptimizationFunction):
         delta_disp = max_strain_component / context.constraints.get("displacement")
 
         if context.constraints.get("buckling"):
-            delta_eigenvalue=eigenvalue/ context.constraints.get("stock_ratio_buckling")
+            delta_eigenvalue=context.constraints.get("stock_ratio_buckling") / eigenvalue
         else:
             delta_eigenvalue=0
 

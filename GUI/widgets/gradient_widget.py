@@ -16,9 +16,13 @@ class GradientSettingsWidget(QWidget):
         self.b1 = QtWidgets.QDoubleSpinBox()
         self.b2 = QtWidgets.QDoubleSpinBox()
         self.grid = QtWidgets.QSpinBox()
+        self.iter_no_update=QtWidgets.QSpinBox()
 
         layout.addWidget(QLabel("Iteration"))
         layout.addWidget(self.iterations_spin)
+
+        layout.addWidget(QLabel("Maximum iterations without improvement"))
+        layout.addWidget(self.iter_no_update)
 
         layout.addWidget(QLabel("Steps"))
         layout.addWidget(self.precision_spin)
@@ -38,13 +42,17 @@ class GradientSettingsWidget(QWidget):
 
     def get_setting(self):
         return {"iterations": self.iterations_spin.value(), "learning_rate": self.learning_rate.value(),
-                "b1":self.b1.value(), "b2":self.b2.value(), "steps":self.iterations_spin.value()}
+                "b1":self.b1.value(), "b2":self.b2.value(), "steps":self.iterations_spin.value(), "iter_no_update":self.iter_no_update.value()}
+
     def get_grid(self):
         return self.grid.value()
 
     def setup_defaults(self):
         self.iterations_spin.setRange(1, 10000)
         self.iterations_spin.setValue(40)
+
+        self.iter_no_update.setRange(1, 10000)
+        self.iter_no_update.setValue(20)
 
         self.precision_spin.setRange(0.001, 0.1)
         self.precision_spin.setDecimals(4)
@@ -58,7 +66,7 @@ class GradientSettingsWidget(QWidget):
 
         self.b1.setRange(0, 0.9)
         self.b1.setDecimals(2)
-        self.b1.setValue(0.7)
+        self.b1.setValue(0.3)
         self.b1.setSingleStep(0.1)
 
         self.b2.setRange(0, 0.99)
