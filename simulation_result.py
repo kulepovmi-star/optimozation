@@ -5,9 +5,10 @@ import os
 
 class SimulationResult:
 
-    mass = None
-    stress_list = None
-    strain_list = None
+    mass = 0
+    stress_list = 0
+    strain_list = 0
+    eigenvalue = 0
 
 
     def point_data(self, base_dir:str):
@@ -16,6 +17,7 @@ class SimulationResult:
               str(base_dir) + r"\1\case1_step0001_substep0001.vtu")  # Пишет откуда берем результаты
         filename = os.path.join(str(base_dir) + r"\1\case1_step0001_substep0001.vtu")  # Указываем путь к файлу
         mass_file = os.path.join(str(base_dir) + r"\1\PreciseMassSummary.log")
+
 
         reader.SetFileName(filename)  # Подключаем путь к читалке и читаем
         reader.Update()  # Needed because of GetScalarRange
@@ -33,11 +35,31 @@ class SimulationResult:
                     break
         return mass
 
-    def save_data(self, base_dir:str):
+    def read_load_multipliers(self, user_log: str) -> float:
+        with open(user_log) as f:
+            for line in f:
+                match = re.search(
+                    r'load\s+multipliers\(1\)\s*=\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)',
+                    line,
+                    re.IGNORECASE
+                )
+                if match:
+                    value  = float(match.group(1))
+                    break
+        return value
+
+    def save_data_static(self, base_dir:str):
         point_data, self.mass=self.point_data(base_dir)
         self.stress_list = vtk_to_numpy(point_data.GetArray("Stress"))  # Считываем напряжения из массива результатов
         self.strain_list = vtk_to_numpy(point_data.GetArray("Displacement"))
         return self
+
+    def save_data_buckling(self, base_dir:str):
+        user_log = os.path.join(str(base_dir) + r"\1\userlog.txt")
+        self.eigenvalue = self.read_load_multipliers(user_log)
+        return self
+
+
 
 
 

@@ -35,6 +35,20 @@ class OptimizationMethod(ABC):
         а шаг за шагом применяется каждый параметр к расчетной модели, отвечающий цели. """
         pass
 
+    def calculation(self, sim_result, context, params):
+        print("устойчивость",context.constraints.get("buckling"))
+
+        context.runner.calculation_static(context.script_processor.build({**params}))
+        sim_result.save_data_static(base_dir=context.base_dir)
+        if context.constraints.get("buckling"):
+            context.runner.calculation_buckling(context.script_processor.build({**params}))
+            sim_result.save_data_buckling(base_dir=context.base_dir)
+        penalty=context.objective.evaluate(sim_result, context, {**params})
+        print(params)
+        print("penalty", penalty)
+        return float(penalty)
+
+
 class Step_by_step_change(OptimizationMethod):
     def __init__(self, iterations=0,checkbox=False):
         super().__init__(iterations)
@@ -42,24 +56,24 @@ class Step_by_step_change(OptimizationMethod):
         self.checkbox=checkbox
 
 
-    def calculation(self, sim_result, context, params):
-        print(params)
-        context.runner.calculation(context.script_processor.build({**params}))
-        sim_result.save_data(base_dir=context.base_dir)
-        context.objective.evaluate(sim_result, context, {**params})
-
-    def substitution(self, sim_result, context, range_of_values,*, name):
-
+    def substitution(self, sim_result, context, range_of_values, progress_queue,*, name):
+        iteration=0
         keys=range_of_values.keys()
         values=range_of_values.values()
+        print(self.checkbox)
         if self.checkbox:
-            for combo in product(*values):
-                params=dict(zip(keys, combo))
-                self.calculation(sim_result, context, params)
+            iterable=list(product(*values))
+            print(iterable)
         else:
-            for combo in zip(*values):
-                params = dict(zip(keys, combo))
-                self.calculation(sim_result, context, params)
+            iterable = list(zip(*values))
+
+        iterations=len(iterable)
+        for combo in iterable:
+            iteration+=1
+            params = dict(zip(keys, combo))
+            self.calculation(sim_result, context, params)
+            progress = int(iteration / iterations * 100)
+            progress_queue.put(("progress", progress))
 
     def optimize(self, context, progress_queue):
         range_of_values = context.range_params.creating_a_range(None)
@@ -68,9 +82,9 @@ class Step_by_step_change(OptimizationMethod):
 
         name_params = iter(range_of_values.keys())
 
-        self.substitution(sim_result, context, range_of_values, name=name_params)
+        self.substitution(sim_result, context, range_of_values, progress_queue, name=name_params)
         if context.best_params is not None:
-            context.runner.calculation(context.script_processor.build(context.best_params))
+            context.runner.calculation_static(context.script_processor.build(context.best_params))
         else: print("the parameters are not optimized")
         progress_queue.put(("finished", None))
 
@@ -90,24 +104,18 @@ class BestProbe(OptimizationMethod):
                 for key, value in range_of_values.items():
                     random_value = random.choice(value)
                     new_params[key] = random_value
-                context.runner.calculation(context.script_processor.build({**new_params}))
-                sim_result.save_data(base_dir=context.base_dir)
-                context.objective.evaluate(sim_result, context, {**new_params})
+                penalty = self.calculation(sim_result, context, new_params)
                 print("параметры", context.best_params)
                 print(iteration, "итерации")
 
                 iteration += 1
                 progress = int((iteration + 1) / self.iterations * 100)
                 progress_queue.put(("progress", progress))
-
-
             if phase < phases - 1 and context.best_params is not None:
                 range_of_values = context.range_params.creating_a_range(context.best_params)
 
-
-
         if context.best_params is not None:
-            context.runner.calculation(context.script_processor.build(context.best_params))
+            context.runner.calculation_static(context.script_processor.build(context.best_params))
         else: print("the parameters are not optimized")
         progress_queue.put(("finished", None))
 
@@ -115,12 +123,13 @@ class GradientDescent(OptimizationMethod):
 
     epsilon = 1e-6
 
-    def __init__(self, iterations, *,steps= 0.01, learning_rate=0.04, b1=0.9, b2=0.99):
+    def __init__(self, iterations, *,steps, learning_rate, b1, b2, iter_no_update):
         super().__init__(iterations)
         self.step_size = steps
         self.lr = learning_rate
         self.b1=b1
         self.b2=b2
+        self.iter_no_update=iter_no_update
         print(steps, learning_rate, b1)
 
     # проблемы: +1) динамически уменьшать шаг (теперь не изменяем значение если изменился знак градиента мб не лучшее решение),
@@ -129,14 +138,29 @@ class GradientDescent(OptimizationMethod):
     # +4) неадекватный l_r, нужно как-то подбирать его в зависимости от параметра и диапазона, при смене знака градиент почти всегда улетает за 1.5, костыли и много if
     # 5) не останавливается при достижении необходимого количества итераций
     # 6) в идеале не брать значения на концах
+    def checker(self):
+        i = 0
+        value = float("inf")
 
+        def condition(new_arr):
+            nonlocal i
+            nonlocal value
+            best_value = min(new_arr)
+            if value <= best_value:
+                i += 1
+            else:
+                i = 0
+                value = best_value
+            return i <= self.iter_no_update
+
+        return condition
     # рекомендации, при сильном изменении параметра уменьшать шаг
     def optimize(self, context, progress_queue):
         params=[]
         sim_result = SimulationResult()
 
         range_of_values = context.range_params.creating_a_range(None)
-
+        can_continue = self.checker()
         new_params = {}
         gradient_dict = {}
         dict_step = {}
@@ -146,7 +170,7 @@ class GradientDescent(OptimizationMethod):
         G = {}
 
         for key, value in range_of_values.items():
-            new_params[key] = random.choice(value)
+            new_params[key] = np.mean(value)
 
             gradient_dict[key] = []
 
@@ -156,25 +180,15 @@ class GradientDescent(OptimizationMethod):
             v[key] = 0
             G[key] = 0
 
-        iteration = 0
 
-        while iteration < self.iterations:
 
-            iteration += 1
+        for iteration in range(self.iterations):
+            all_penalty = []
             print("iteration", iteration)
 
             # 1 базовый расчет
-
-            context.runner.calculation(
-                context.script_processor.build(new_params)
-            )
-
-            sim_result.save_data(base_dir=context.base_dir)
-
-            penalty_base = np.log(context.objective.evaluate(
-                sim_result, context, new_params
-            )+1)
-
+            penalty_base = self.calculation(sim_result, context, new_params)
+            all_penalty.append(penalty_base)
             gradients = {}
 
             # 2 вычисляем все градиенты
@@ -186,26 +200,13 @@ class GradientDescent(OptimizationMethod):
 
                 if max_value > max(range_of_values[key]):
                     max_value = max(range_of_values[key])
-
                 params_plus = {**new_params, **{key: max_value}}
-
-                context.runner.calculation(
-                    context.script_processor.build(params_plus)
-                )
-
-                sim_result.save_data(base_dir=context.base_dir)
-
-                penalty_plus = np.log(context.objective.evaluate(
-                    sim_result, context, params_plus
-                )+1)
-
+                penalty_plus = self.calculation(sim_result, context, params_plus)
                 gradient = (penalty_plus - penalty_base) / step
                 gradient=max(-5, min(5, gradient))
                 gradients[key] = gradient
-
                 gradient_dict[key].append(gradient)
-
-
+                all_penalty.append(penalty_plus)
 
             # 3 обновляем параметры
 
@@ -259,16 +260,18 @@ class GradientDescent(OptimizationMethod):
             new_params = temporal_params
             progress = int((iteration) / self.iterations * 100)
             progress_queue.put(("progress", progress))
-
+            if not can_continue(all_penalty):
+                break
         if context.best_params is not None:
-            context.runner.calculation(context.script_processor.build(context.best_params))
+            context.runner.calculation_static(context.script_processor.build(context.best_params))
         else: print("the parameters are not optimized")
         progress_queue.put(("finished", None))
 
 
-class Bayesian_optimization():
+class Bayesian_optimization(OptimizationMethod):
 
     def __init__(self, iterations, selection, b):
+        super().__init__(iterations)
         self.iterations = iterations
         self.delta=float("inf")
         self.L=None
@@ -286,9 +289,9 @@ class Bayesian_optimization():
                 k: random.choice(v)
                 for k, v in range_of_values.items()
             }
-
             X_train.append(list(new_params.values()))
-            penalty = self.func(X_train[-1], param_names, context, sim_result)
+            params = self.vector_to_params(X_train[-1], param_names)
+            penalty = self.calculation( sim_result, context, params)
             Y_train.append(
                 penalty
             )
@@ -302,29 +305,6 @@ class Bayesian_optimization():
 
     def vector_to_params(self, x_vec, param_names):
         return dict(zip(param_names, x_vec))
-
-    def func(self, x_vec, param_names, context, sim_result):
-        print(x_vec, param_names)
-        params = self.vector_to_params(x_vec, param_names)
-
-        context.runner.calculation(
-            context.script_processor.build(params)
-        )
-
-        sim_result.save_data(base_dir=context.base_dir)
-
-        penalty = context.objective.evaluate(
-                          sim_result, context, params)
-        print("penalty:", penalty)
-
-
-        print(x_vec)
-        # x = x_vec[0]
-        # y = x_vec[1]
-        # penalty=np.sin(3*x) + 0.5*np.sin(8*x) + x**2 / 10
-        return float(penalty)
-
-
 
 
     def plot_gp(self, model, bounds, train_x_real, train_y, param_names):
@@ -562,8 +542,8 @@ class Bayesian_optimization():
                         bounds
                     )
 
-
-            new_y = self.func(candidate_real.detach().numpy().flatten(), param_names, context, sim_result)
+            params = self.vector_to_params(candidate_real.detach().numpy().flatten(), param_names)
+            new_y = self.calculation(sim_result, context, params )
             train_x_real = cat([
                 train_x_real,
                 candidate_real
@@ -584,7 +564,7 @@ class Bayesian_optimization():
 
         if context.best_params is not None:
             print(context.best_params)
-            context.runner.calculation(context.script_processor.build(context.best_params))
+            context.runner.calculation_static(context.script_processor.build(context.best_params))
         else: print("the parameters are not optimized")
         progress_queue.put(("finished", None))
         self.plot_gp(model,

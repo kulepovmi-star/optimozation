@@ -63,6 +63,8 @@ class WidgetforTable(QtWidgets.QWidget):
         if col > 1:
             self.table.removeColumn(col - 1)
 
+
+
 class Table(QtWidgets.QTableWidget):
     def __init__(self):
         super().__init__()
@@ -92,7 +94,10 @@ class Table(QtWidgets.QTableWidget):
         new_data=defaultdict(list)
         for row in range(self.rowCount()):
             for column in range(1, self.columnCount()):
-                new_data[self.item(row, 0).text()].append(float(self.item(row, column).text()))
+                if self.item(row, column):
+                    new_data[self.item(row, 0).text()].append(self.item(row, column).text())
+                else:
+                    new_data[self.item(row, 0).text()].append("empty_value")
         self.data=new_data
         return self.data
 
@@ -117,6 +122,24 @@ class StepSettingsWidget(QWidget):
         layout.addWidget(self.TableParamsWidget)
         layout.addStretch()
 
-
     def save_data(self):
-        return {**self.TableParamsWidget.save_data()}
+        data = {**self.TableParamsWidget.save_data()}
+        true_data = {}
+        for k, v in data.items():
+            true_data[k]=[]
+            for i in v:
+                true_data[k].append(float(i))
+        return true_data
+
+
+    def check_data(self):
+        data = self.TableParamsWidget.save_data()
+        for k, v in data.items():
+            for i in v:
+                try:
+                    float(i)
+                except:
+                    print(i)
+                    return False
+        return True
+

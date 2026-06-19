@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTabWidget, QLabel
+from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTabWidget, QLabel, QCheckBox
 from PySide6 import QtGui, QtCore, QtWidgets
 
 class MassObjectiveWidget(QWidget):
@@ -27,16 +27,34 @@ class MassObjectiveWidget(QWidget):
         self.penalty_rate.setValue(20)
         self.penalty_rate.setSingleStep(1)
         layout.addWidget(self.penalty_rate)
+
+        self.stability = QCheckBox("Учитывать потерю устойчивости")
+        layout.addWidget(self.stability)
+
+        self.stability_ratio = QtWidgets.QDoubleSpinBox()
+        layout.addWidget(QtWidgets.QLabel("Stability ratio"))
+        self.stability_ratio.setRange(1, 100)
+        self.stability_ratio.setValue(1.5)
+        self.stability_ratio.setSingleStep(0.1)
+        self.stability_ratio.setEnabled(False)
+        layout.addWidget(self.stability_ratio)
+        self.stability.toggled.connect(
+            self.stability_ratio.setEnabled
+        )
         layout.addStretch()
 
     def get_setting(self):
 
         return self.check_setting()
+
     def check_setting(self):
         settings={"stress": self.max_stress.value(), "displacement": self.max_strain.value(),
-         "penalty": self.penalty_rate.value()}
+         "penalty": self.penalty_rate.value(), "stock_ratio_buckling":self.stability_ratio.value()}
         for k, v in settings.items():
             if v<=0:
                 settings.update({k:float("inf")})
         return settings
+
+    def get_buckling(self):
+        return {"buckling":self.stability.isChecked()}
 
